@@ -23,12 +23,8 @@ A full-stack real-time collaboration app for remote teams, developers, and stude
 ## Quick Start
 
 ### 1. Start MongoDB & Redis
-
-```bash
-docker-compose up -d
-```
-
-Or install MongoDB and Redis locally.
+- **Cloud (Current):** Update `MONGO_URI` and `REDIS_URL` in `backend/.env`.
+- **Docker:** Run `docker-compose up -d` for local development.
 
 ### 2. Backend
 
