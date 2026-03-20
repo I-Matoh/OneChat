@@ -59,8 +59,8 @@ function AppShell() {
       {/* ===== Sidebar ===== */}
       <div className="sidebar">
         <div className="sidebar-header">
-          <div className="sidebar-logo">LS</div>
-          <span className="sidebar-title">LiveSync</span>
+          <img src="/logo.png" alt="OneChat" className="sidebar-logo" />
+          <span className="sidebar-title">OneChat</span>
         </div>
 
         <div className="sidebar-nav">

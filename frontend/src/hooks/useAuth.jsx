@@ -11,7 +11,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const stored = localStorage.getItem('livesync_auth');
+    const stored = localStorage.getItem('onechat_auth');
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
@@ -32,7 +32,7 @@ export function AuthProvider({ children }) {
     if (!res.ok) throw new Error(data.error || 'Login failed');
     setUser(data.user);
     setToken(data.token);
-    localStorage.setItem('livesync_auth', JSON.stringify(data));
+    localStorage.setItem('onechat_auth', JSON.stringify(data));
     return data;
   }, []);
 
@@ -46,14 +46,14 @@ export function AuthProvider({ children }) {
     if (!res.ok) throw new Error(data.error || 'Registration failed');
     setUser(data.user);
     setToken(data.token);
-    localStorage.setItem('livesync_auth', JSON.stringify(data));
+    localStorage.setItem('onechat_auth', JSON.stringify(data));
     return data;
   }, []);
 
   const logout = useCallback(() => {
     setUser(null);
     setToken(null);
-    localStorage.removeItem('livesync_auth');
+    localStorage.removeItem('onechat_auth');
     disconnectSocket();
   }, []);
 

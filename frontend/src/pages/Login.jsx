@@ -1,5 +1,15 @@
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useAuth } from '../hooks/useAuth';
+import LoginBackground from '../components/LoginBackground';
+
+function LoadingFallback() {
+  return (
+    <div className="login-3d-loading">
+      <div className="loading-spinner"></div>
+      <p>Loading experience...</p>
+    </div>
+  );
+}
 
 export default function Login() {
   const { login, register } = useAuth();
@@ -29,11 +39,16 @@ export default function Login() {
 
   return (
     <div className="auth-page">
+      {/* 3D Background */}
+      <Suspense fallback={<LoadingFallback />}>
+        <LoginBackground />
+      </Suspense>
+      
       <form className="auth-card" onSubmit={handleSubmit}>
-        <div className="auth-logo">LS</div>
+        <img src="/logo.png" alt="OneChat" className="auth-logo" />
         <h1 className="auth-title">{isRegister ? 'Create Account' : 'Welcome Back'}</h1>
         <p className="auth-subtitle">
-          {isRegister ? 'Join LiveSync and start collaborating' : 'Sign in to continue to LiveSync'}
+          {isRegister ? 'Join OneChat and start collaborating' : 'Sign in to continue to OneChat'}
         </p>
 
         {isRegister && (

@@ -1,4 +1,4 @@
-# LiveSync — Real-Time Collaboration Platform
+# OneChat — Real-Time Collaboration Platform
 
 A full-stack real-time collaboration app for remote teams, developers, and students.
 
@@ -12,17 +12,18 @@ A full-stack real-time collaboration app for remote teams, developers, and stude
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 18, Vite, Socket.IO Client |
-| Backend | Node.js, Express, Socket.IO |
-| Database | MongoDB (Mongoose) |
-| Cache / Pub-Sub | Redis (ioredis) |
-| Auth | JWT + bcrypt |
+| Layer           | Technology                       |
+| --------------- | -------------------------------- |
+| Frontend        | React 18, Vite, Socket.IO Client |
+| Backend         | Node.js, Express, Socket.IO      |
+| Database        | MongoDB (Mongoose)               |
+| Cache / Pub-Sub | Redis (ioredis)                  |
+| Auth            | JWT + bcrypt                     |
 
 ## Quick Start
 
 ### 1. Start MongoDB & Redis
+
 - **Cloud (Current):** Update `MONGO_URI` and `REDIS_URL` in `backend/.env`.
 - **Docker:** Run `docker-compose up -d` for local development.
 
