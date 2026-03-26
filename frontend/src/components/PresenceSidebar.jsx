@@ -1,29 +1,45 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { useSocketEvent } from '../hooks/useSocket';
+import { useSocket } from '../hooks/useSocket';
+import { getSocket } from '../hooks/useSocket';
 
 export default function PresenceSidebar() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
+  const { connected } = useSocket(token);
   const [onlineUsers, setOnlineUsers] = useState([]);
 
-  useSocketEvent('presence:init', useCallback((users) => {
-    setOnlineUsers(users);
-  }, []));
-
-  useSocketEvent('presence:update', useCallback((data) => {
-    setOnlineUsers((prev) => {
-      const existing = prev.findIndex((u) => u.userId === data.userId);
-      if (data.status === 'offline') {
-        return prev.filter((u) => u.userId !== data.userId);
-      }
-      if (existing >= 0) {
-        const updated = [...prev];
-        updated[existing] = { ...updated[existing], ...data };
-        return updated;
-      }
-      return [...prev, data];
-    });
-  }, []));
+  useEffect(() => {
+    if (!token || !connected) return;
+    
+    const socket = getSocket(token);
+    
+    const handleInit = (users) => {
+      setOnlineUsers(users);
+    };
+    
+    const handleUpdate = (data) => {
+      setOnlineUsers((prev) => {
+        const existing = prev.findIndex((u) => u.userId === data.userId);
+        if (data.status === 'offline') {
+          return prev.filter((u) => u.userId !== data.userId);
+        }
+        if (existing >= 0) {
+          const updated = [...prev];
+          updated[existing] = { ...updated[existing], ...data };
+          return updated;
+        }
+        return [...prev, data];
+      });
+    };
+    
+    socket.on('presence:init', handleInit);
+    socket.on('presence:update', handleUpdate);
+    
+    return () => {
+      socket.off('presence:init', handleInit);
+      socket.off('presence:update', handleUpdate);
+    };
+  }, [token, connected]);
 
   const sortedUsers = [...onlineUsers].sort((a, b) => {
     if (a.userId === user?.id) return -1;
