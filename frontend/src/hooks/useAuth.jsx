@@ -3,7 +3,7 @@ import { disconnectSocket } from './useSocket';
 
 const AuthContext = createContext(null);
 
-const API = '';
+const API = import.meta.env.VITE_API_URL || '';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
