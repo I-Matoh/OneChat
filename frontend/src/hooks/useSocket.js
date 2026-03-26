@@ -1,11 +1,13 @@
 import { io } from 'socket.io-client';
 import { useState, useEffect, useRef, useCallback } from 'react';
 
+const API_URL = import.meta.env.VITE_API_URL || '';
+
 let socket = null;
 
 export function getSocket(token) {
   if (!socket && token) {
-    socket = io('/', {
+    socket = io(API_URL, {
       auth: { token },
       reconnection: true,
       reconnectionDelay: 1000,
