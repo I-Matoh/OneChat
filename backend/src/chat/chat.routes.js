@@ -2,6 +2,7 @@ const { Router } = require('express');
 const { authMiddleware } = require('../middleware/auth');
 const Message = require('../models/Message');
 const Conversation = require('../models/Conversation');
+const { getGlobalIo } = require('../websocket/socketServer');
 
 const router = Router();
 
@@ -24,6 +25,18 @@ router.post('/conversations', authMiddleware, async (req, res) => {
     const participants = [req.user.id, ...(participantIds || [])];
     const conv = await Conversation.create({ participants, name: name || '' });
     const populated = await conv.populate('participants', 'name email status');
+    
+    // Emit conversation:new to all participants for real-time updates
+    const io = getGlobalIo();
+    if (io) {
+      for (const participantId of participants) {
+        io.to(`user:${participantId}`).emit('conversation:new', {
+          ...populated.toObject(),
+          createdBy: { _id: req.user.id, name: req.user.name }
+        });
+      }
+    }
+    
     res.status(201).json(populated);
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -21,6 +21,16 @@ const { registerChatHandlers } = require('../chat/chat.handler');
 const { registerCollabHandlers } = require('../collaboration/collab.handler');
 const { registerPresenceHandlers, getOnlineUsers } = require('../presence/presence.service');
 
+// Store io instance globally for use by other modules (routes, services)
+let globalIo = null;
+
+/**
+ * Get the global io instance for emitting events from non-socket modules
+ */
+function getGlobalIo() {
+  return globalIo;
+}
+
 /**
  * Initialize Socket.IO server with authentication and handlers
  * 
@@ -33,6 +43,7 @@ const { registerPresenceHandlers, getOnlineUsers } = require('../presence/presen
  * @param {Object} io - Socket.IO server instance
  */
 function initSocketServer(io) {
+  globalIo = io;
   io.use(socketAuthMiddleware);
 
   io.on('connection', async (socket) => {
@@ -56,4 +67,4 @@ function initSocketServer(io) {
   console.log('✅ Socket.IO server initialized');
 }
 
-module.exports = { initSocketServer };
+module.exports = { initSocketServer, getGlobalIo };

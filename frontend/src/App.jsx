@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './hooks/useAuth';
-import { useSocket } from './hooks/useSocket';
+import { useSocket, useSocketEvent, getSocket } from './hooks/useSocket';
 import { useApi } from './hooks/useApi';
 import Login from './pages/Login';
 import Chat from './pages/Chat';
@@ -33,6 +33,26 @@ function AppShell() {
     if (!token) return;
     apiFetch('/docs').then(setDocuments).catch(() => {});
   }, [token]);
+
+  // Handle new conversation created by another user
+  useSocketEvent('conversation:new', (conv) => {
+    // Only add if not already in the list
+    setConversations((prev) => {
+      if (prev.find((c) => c._id === conv._id)) return prev;
+      return [conv, ...prev];
+    });
+  }, []);
+
+  // Handle conversation updates (new messages from other users)
+  useSocketEvent('conversation:updated', (data) => {
+    setConversations((prev) =>
+      prev.map((c) =>
+        c._id === data.conversationId
+          ? { ...c, lastMessage: data.lastMessage, updatedAt: data.updatedAt }
+          : c
+      ).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+    );
+  }, []);
 
   async function createDocument() {
     const doc = await apiFetch('/docs', {

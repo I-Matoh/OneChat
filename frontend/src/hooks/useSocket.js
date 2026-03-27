@@ -52,14 +52,30 @@ export function useSocket(token) {
   return { socket: socketRef.current, connected };
 }
 
-export function useSocketEvent(eventName, handler) {
+/**
+ * Hook to listen for socket events with automatic cleanup and dependency tracking.
+ * The handler will be updated whenever dependencies change.
+ * 
+ * @param {string} eventName - The socket event name to listen for
+ * @param {Function} handler - The handler function (can use refs to access latest state)
+ * @param {Array} deps - Dependencies that should trigger handler update
+ */
+export function useSocketEvent(eventName, handler, deps = []) {
   const savedHandler = useRef(handler);
-  useEffect(() => { savedHandler.current = handler; }, [handler]);
+  
+  // Always keep the latest handler
+  useEffect(() => {
+    savedHandler.current = handler;
+  }, [handler, ...deps]);
 
   useEffect(() => {
     if (!socket) return;
+    
     const fn = (...args) => savedHandler.current(...args);
     socket.on(eventName, fn);
-    return () => socket.off(eventName, fn);
-  }, [eventName]);
+    
+    return () => {
+      socket.off(eventName, fn);
+    };
+  }, [eventName]); // Only re-register on event name change
 }

@@ -11,46 +11,91 @@ export default function Chat({ activeConvId, setActiveConvId, conversations, set
   const [typingUsers, setTypingUsers] = useState([]);
   const messagesEndRef = useRef(null);
   const typingTimeout = useRef(null);
-
-  // Load messages when conversation changes
+  
+  // Use refs to access latest state in socket event handlers (avoid stale closures)
+  const activeConvIdRef = useRef(activeConvId);
+  const setConversationsRef = useRef(setConversations);
+  const setMessagesRef = useRef(setMessages);
+  const setTypingUsersRef = useRef(setTypingUsers);
+  
+  // Keep refs updated
   useEffect(() => {
-    if (!activeConvId) return;
+    activeConvIdRef.current = activeConvId;
+  }, [activeConvId]);
+  useEffect(() => {
+    setConversationsRef.current = setConversations;
+  }, [setConversations]);
+  useEffect(() => {
+    setMessagesRef.current = setMessages;
+  }, [setMessages]);
+  useEffect(() => {
+    setTypingUsersRef.current = setTypingUsers;
+  }, [setTypingUsers]);
+
+  // Clear messages and load new when conversation changes
+  useEffect(() => {
+    if (!activeConvId) {
+      setMessages([]);
+      return;
+    }
+    
+    // Clear existing messages immediately
+    setMessages([]);
+    
+    // Load messages for new conversation
     apiFetch(`/chat/conversations/${activeConvId}/messages`)
       .then(setMessages)
       .catch(() => setMessages([]));
   }, [activeConvId]);
 
-  // Join conversation room
+  // Join conversation room and leave previous one
   useEffect(() => {
-    if (!activeConvId || !token) return;
+    if (!token) return;
     const s = getSocket(token);
-    s.emit('chat:join', activeConvId);
+    
+    if (activeConvId) {
+      s.emit('chat:join', activeConvId);
+    }
+    
+    // Cleanup: leave conversation when component unmounts or conversation changes
+    return () => {
+      if (activeConvId) {
+        s.emit('chat:leave', activeConvId);
+      }
+    };
   }, [activeConvId, token]);
 
-  // Listen for new messages
-  useSocketEvent('message:new', useCallback((msg) => {
-    if (msg.conversationId === activeConvId) {
-      setMessages((prev) => [...prev, msg]);
+  // Listen for new messages - use refs to avoid stale closures
+  useSocketEvent('message:new', (msg) => {
+    const currentConvId = activeConvIdRef.current;
+    
+    if (msg.conversationId === currentConvId) {
+      setMessagesRef.current((prev) => [...prev, msg]);
     }
+    
     // Update conversation list's last message
-    setConversations((prev) =>
+    setConversationsRef.current((prev) =>
       prev.map((c) =>
         c._id === msg.conversationId ? { ...c, lastMessage: msg.content, updatedAt: msg.createdAt } : c
-      )
+      ).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
     );
-  }, [activeConvId]));
+  }, []);
 
-  // Typing indicators
-  useSocketEvent('message:typing', useCallback((data) => {
-    if (data.conversationId !== activeConvId) return;
-    setTypingUsers((prev) => {
+  // Typing indicators - use refs to avoid stale closures
+  useSocketEvent('message:typing', (data) => {
+    const currentConvId = activeConvIdRef.current;
+    if (data.conversationId !== currentConvId) return;
+    
+    setTypingUsersRef.current((prev) => {
       if (prev.find((u) => u.userId === data.userId)) return prev;
       return [...prev, data];
     });
+    
+    // Auto-remove typing indicator after 3 seconds
     setTimeout(() => {
-      setTypingUsers((prev) => prev.filter((u) => u.userId !== data.userId));
+      setTypingUsersRef.current((prev) => prev.filter((u) => u.userId !== data.userId));
     }, 3000);
-  }, [activeConvId]));
+  }, []);
 
   // Scroll to bottom on new messages
   useEffect(() => {

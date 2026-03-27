@@ -4,9 +4,14 @@ const { getPub } = require('../config/redis');
 const { createNotification } = require('../notifications/notification.service');
 
 function registerChatHandlers(io, socket) {
-  // Join all conversations the user is part of
+  // Join a conversation room to receive messages
   socket.on('chat:join', async (conversationId) => {
     socket.join(`chat:${conversationId}`);
+  });
+
+  // Leave a conversation room
+  socket.on('chat:leave', async (conversationId) => {
+    socket.leave(`chat:${conversationId}`);
   });
 
   // Send a message
@@ -19,7 +24,7 @@ function registerChatHandlers(io, socket) {
         content,
       });
 
-      // Update conversation's last message
+      // Update conversation's last message and sort order
       await Conversation.findByIdAndUpdate(conversationId, {
         lastMessage: content,
         updatedAt: Date.now(),
@@ -34,7 +39,7 @@ function registerChatHandlers(io, socket) {
         createdAt: msg.createdAt,
       };
 
-      // Broadcast to room
+      // Broadcast to room (all participants in the conversation)
       io.to(`chat:${conversationId}`).emit('message:new', populated);
 
       // Publish to Redis for horizontal scaling
@@ -49,6 +54,12 @@ function registerChatHandlers(io, socket) {
         const others = conv.participants.filter((p) => p.toString() !== socket.user.id);
         for (const userId of others) {
           createNotification(io, userId.toString(), 'message', `${socket.user.name}: ${content.substring(0, 80)}`);
+          // Also emit conversation:updated to update their conversation list
+          io.to(`user:${userId}`).emit('conversation:updated', {
+            conversationId,
+            lastMessage: content,
+            updatedAt: msg.createdAt
+          });
         }
       }
     } catch (err) {
