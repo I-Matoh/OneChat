@@ -10,8 +10,10 @@ node_modules/
 dist/
 build/
 
-.claude 
-.agent 
+.agent
+.claude
+skills
+.claude/ 
 
 
 # Logs

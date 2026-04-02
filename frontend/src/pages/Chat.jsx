@@ -12,6 +12,7 @@ export default function Chat({ activeConvId, setActiveConvId, conversations, set
   const messagesEndRef = useRef(null);
   const typingTimeout = useRef(null);
   
+  
   // Use refs to access latest state in socket event handlers (avoid stale closures)
   const activeConvIdRef = useRef(activeConvId);
   const setConversationsRef = useRef(setConversations);
