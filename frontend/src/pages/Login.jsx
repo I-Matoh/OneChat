@@ -4,9 +4,9 @@ import LoginBackground from '../components/LoginBackground';
 
 function LoadingFallback() {
   return (
-    <div className="login-3d-loading">
+    <div className="loading-page">
       <div className="loading-spinner"></div>
-      <p>Loading experience...</p>
+      <p className="loading-text">Loading experience...</p>
     </div>
   );
 }
@@ -55,10 +55,10 @@ export default function Login() {
 
         {isRegister && (
           <div className="form-group">
-            <label className="form-label" htmlFor="name">Full Name</label>
+            <label className="label" htmlFor="name">Full Name</label>
             <input
               id="name"
-              className="form-input"
+              className="input"
               type="text"
               placeholder="John Doe"
               value={name}
@@ -69,10 +69,10 @@ export default function Login() {
         )}
 
         <div className="form-group">
-          <label className="form-label" htmlFor="email">Email</label>
+          <label className="label" htmlFor="email">Email</label>
           <input
             id="email"
-            className="form-input"
+            className="input"
             type="email"
             placeholder="you@example.com"
             value={email}
@@ -82,10 +82,10 @@ export default function Login() {
         </div>
 
         <div className="form-group">
-          <label className="form-label" htmlFor="password">Password</label>
+          <label className="label" htmlFor="password">Password</label>
           <input
             id="password"
-            className="form-input"
+            className="input"
             type="password"
             placeholder="••••••••"
             value={password}
@@ -97,7 +97,7 @@ export default function Login() {
 
         {error && <p className="form-error">{error}</p>}
 
-        <button className="btn btn-primary auth-btn" type="submit" disabled={loading}>
+        <button className="btn btn-primary w-full" type="submit" disabled={loading}>
           {loading ? '...' : isRegister ? 'Create Account' : 'Sign In'}
         </button>
 

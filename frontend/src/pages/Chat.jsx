@@ -127,20 +127,23 @@ export default function Chat({ activeConvId, setActiveConvId, conversations, set
 
   if (!activeConvId) {
     return (
-      <div className="windows-chat-layout">
+      <div className="chat-layout">
         {/* Left Panel - Chats List */}
-        <div className="windows-chat-list">
-          <div className="windows-search-box">
-            <span className="windows-search-icon">🔍</span>
+        <div className="chat-sidebar">
+          <div className="chat-sidebar-header">
+            <h2 className="chat-sidebar-title">Conversations</h2>
+            <div className="chat-search">
+              <span className="chat-search-icon">🔍</span>
             <input 
               type="text" 
-              className="windows-search-input"
-              placeholder="Search conversations..."
+              className="chat-search-input"
+              placeholder="Search..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
+            </div>
           </div>
-          <div className="windows-chat-items">
+          <div className="chat-list">
             {conversations
               .filter(c => {
                 const displayName = c.name || c.participants?.map(p => p.name || 'User').join(', ') || 'Chat';
@@ -152,21 +155,21 @@ export default function Chat({ activeConvId, setActiveConvId, conversations, set
               return (
                 <div
                   key={conv._id}
-                  className={`windows-chat-item ${isActive ? 'active' : ''}`}
+                  className={`chat-item ${isActive ? 'active' : ''}`}
                   onClick={() => setActiveConvId(conv._id)}
                 >
-                  <div className="windows-chat-avatar">
+                  <div className="chat-avatar">
                     {displayName[0].toUpperCase()}
-                    <span className="windows-online-dot"></span>
+                    <span className="chat-avatar-dot"></span>
                   </div>
-                  <div className="windows-chat-info">
-                    <div className="windows-chat-name-row">
-                      <span className="windows-chat-name">{displayName}</span>
-                      <span className="windows-chat-time">
+                  <div className="chat-info">
+                    <div className="chat-name-row">
+                      <span className="chat-name">{displayName}</span>
+                      <span className="chat-time">
                         {conv.updatedAt ? new Date(conv.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                       </span>
                     </div>
-                    <div className="windows-chat-preview">{conv.lastMessage || 'No messages yet'}</div>
+                    <div className="chat-preview">{conv.lastMessage || 'No messages yet'}</div>
                   </div>
                 </div>
               );
@@ -175,19 +178,19 @@ export default function Chat({ activeConvId, setActiveConvId, conversations, set
         </div>
 
         {/* Center Panel - Empty Chat Area */}
-        <div className="windows-chat-main">
-          <div className="windows-empty-state">
-            <div className="windows-empty-icon">💬</div>
-            <div className="windows-empty-title">Select a conversation</div>
-            <div className="windows-empty-hint">Choose from the sidebar to start chatting</div>
+        <div className="chat-main">
+          <div className="empty-state">
+            <div className="empty-icon">💬</div>
+            <div className="empty-title">Select a conversation</div>
+            <div className="empty-hint">Choose from the sidebar to start chatting</div>
           </div>
         </div>
 
         {/* Right Panel - Contact Info (placeholder) */}
-        <div className="windows-contact-panel">
-          <div className="windows-contact-empty">
-            <div className="windows-contact-icon">👤</div>
-            <div className="windows-contact-text">Select a chat to view contact info</div>
+        <div className="contact-panel">
+          <div className="contact-empty">
+            <div className="empty-icon">👤</div>
+            <div className="empty-hint">Select a chat to view contact info</div>
           </div>
         </div>
       </div>
@@ -197,47 +200,50 @@ export default function Chat({ activeConvId, setActiveConvId, conversations, set
   const activeConv = conversations.find((c) => c._id === activeConvId);
   const displayName = activeConv?.name || activeConv?.participants?.filter((p) => (p._id || p) !== user.id).map((p) => p.name || 'User').join(', ') || 'Chat';
 
-  return (
-    <div className="windows-chat-layout">
+return (
+    <div className="chat-layout">
       {/* Left Panel - Chats List */}
-      <div className="windows-chat-list">
-        <div className="windows-search-box">
-          <span className="windows-search-icon">🔍</span>
-          <input 
-            type="text" 
-            className="windows-search-input"
-            placeholder="Search conversations..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+      <div className="chat-sidebar">
+        <div className="chat-sidebar-header">
+          <h2 className="chat-sidebar-title">Conversations</h2>
+          <div className="chat-search">
+            <span className="chat-search-icon">🔍</span>
+            <input 
+              type="text" 
+              className="chat-search-input"
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
         </div>
-        <div className="windows-chat-items">
+        <div className="chat-list">
           {conversations
             .filter(c => {
               const name = c.name || c.participants?.map(p => p.name || 'User').join(', ') || 'Chat';
               return name.toLowerCase().includes(searchQuery.toLowerCase());
             })
             .map((conv) => {
-            const name = conv.name || conv.participants?.filter((p) => (p._id || p) !== user.id).map((p) => p.name || 'User').join(', ') || 'Chat';
+            const name = c.name || conv.participants?.filter((p) => (p._id || p) !== user.id).map((p) => p.name || 'User').join(', ') || 'Chat';
             const isActive = activeConvId === conv._id;
             return (
               <div
                 key={conv._id}
-                className={`windows-chat-item ${isActive ? 'active' : ''}`}
+                className={`chat-item ${isActive ? 'active' : ''}`}
                 onClick={() => setActiveConvId(conv._id)}
               >
-                <div className="windows-chat-avatar">
+                <div className="chat-avatar">
                   {name[0].toUpperCase()}
-                  <span className="windows-online-dot"></span>
+                  <span className="chat-avatar-dot"></span>
                 </div>
-                <div className="windows-chat-info">
-                  <div className="windows-chat-name-row">
-                    <span className="windows-chat-name">{name}</span>
-                    <span className="windows-chat-time">
+                <div className="chat-info">
+                  <div className="chat-name-row">
+                    <span className="chat-name">{name}</span>
+                    <span className="chat-time">
                       {conv.updatedAt ? new Date(conv.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                     </span>
                   </div>
-                  <div className="windows-chat-preview">{conv.lastMessage || 'No messages yet'}</div>
+                  <div className="chat-preview">{conv.lastMessage || 'No messages yet'}</div>
                 </div>
               </div>
             );
@@ -246,23 +252,23 @@ export default function Chat({ activeConvId, setActiveConvId, conversations, set
       </div>
 
       {/* Center Panel - Chat Area */}
-      <div className="windows-chat-main">
-        <div className="windows-chat-header">
-          <div className="windows-chat-header-info">
-            <div className="windows-chat-header-avatar">{displayName[0].toUpperCase()}</div>
-            <div className="windows-chat-header-details">
-              <div className="windows-chat-header-name">{displayName}</div>
-              <div className="windows-chat-header-status">Online</div>
+      <div className="chat-main">
+        <div className="chat-header">
+          <div className="chat-header-info">
+            <div className="chat-avatar">{displayName[0].toUpperCase()}</div>
+            <div className="chat-info">
+              <div className="chat-name">{displayName}</div>
+              <div className="chat-header-status">Online</div>
             </div>
           </div>
-          <div className="windows-chat-header-actions">
-            <button className="windows-header-btn" title="Voice call">📞</button>
-            <button className="windows-header-btn" title="Video call">📹</button>
-            <button className="windows-header-btn" title="More options">⋮</button>
+          <div className="chat-header-actions">
+            <button className="btn-icon" title="Voice call">📞</button>
+            <button className="btn-icon" title="Video call">📹</button>
+            <button className="btn-icon" title="More options">⋮</button>
           </div>
         </div>
 
-        <div className="messages-container">
+        <div className="messages-panel">
           {messages.map((msg) => {
             const isOwn = (msg.senderId === user.id) || (msg.senderId?._id === user.id);
             return (
@@ -296,8 +302,8 @@ export default function Chat({ activeConvId, setActiveConvId, conversations, set
           </div>
         )}
 
-        <div className="chat-input-container">
-          <form className="chat-input-wrapper" onSubmit={handleSend}>
+        <div className="chat-input-panel">
+          <form className="chat-input-form" onSubmit={handleSend}>
             <input
               className="chat-input"
               placeholder="Type a message..."
@@ -305,7 +311,7 @@ export default function Chat({ activeConvId, setActiveConvId, conversations, set
               onChange={handleInputChange}
               id="chat-message-input"
             />
-            <button type="submit" className="btn btn-primary" style={{ borderRadius: 12 }}>
+            <button type="submit" className="btn btn-primary">
               Send
             </button>
           </form>
@@ -313,34 +319,34 @@ export default function Chat({ activeConvId, setActiveConvId, conversations, set
       </div>
 
       {/* Right Panel - Contact Info */}
-      <div className={`windows-contact-panel ${showContactInfo ? 'show' : ''}`}>
-        <div className="windows-contact-header">
-          <div className="windows-contact-avatar-large">{displayName[0].toUpperCase()}</div>
-          <div className="windows-contact-name">{displayName}</div>
-          <div className="windows-contact-status-online">Online</div>
+      <div className={`contact-panel ${showContactInfo ? '' : ''}`}>
+        <div className="contact-header">
+          <div className="contact-avatar-large">{displayName[0].toUpperCase()}</div>
+          <div className="contact-name">{displayName}</div>
+          <div className="contact-status">Online</div>
         </div>
-        <div className="windows-contact-details">
-          <div className="windows-contact-section">
-            <div className="windows-contact-label">About</div>
-            <div className="windows-contact-value">Hey there! I'm using OneChat</div>
+        <div className="contact-details">
+          <div className="contact-section">
+            <div className="contact-label">About</div>
+            <div className="contact-value">Hey there! I'm using OneChat</div>
           </div>
-          <div className="windows-contact-section">
-            <div className="windows-contact-label">Phone</div>
-            <div className="windows-contact-value">+1 234 567 8900</div>
+          <div className="contact-section">
+            <div className="contact-label">Phone</div>
+            <div className="contact-value">+1 234 567 8900</div>
           </div>
-          <div className="windows-contact-section">
-            <div className="windows-contact-label">Email</div>
-            <div className="windows-contact-value">user@example.com</div>
+          <div className="contact-section">
+            <div className="contact-label">Email</div>
+            <div className="contact-value">user@example.com</div>
           </div>
         </div>
-        <div className="windows-contact-actions">
-          <button className="windows-contact-action-btn">
+        <div className="contact-actions">
+          <button className="contact-action-btn">
             <span>📞</span> Voice Call
           </button>
-          <button className="windows-contact-action-btn">
+          <button className="contact-action-btn">
             <span>📹</span> Video Call
           </button>
-          <button className="windows-contact-action-btn danger">
+          <button className="contact-action-btn danger">
             <span>🚫</span> Block
           </button>
         </div>

@@ -10,8 +10,15 @@ node_modules/
 dist/
 build/
 
-.agent
-.claude
+
+.agent/
+.claude/
+.kilo/
+.cursor/
+.gemini/
+.aider/
+.aider/
+
 
 # Logs
 *.log

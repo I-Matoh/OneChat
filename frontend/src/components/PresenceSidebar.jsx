@@ -49,27 +49,27 @@ export default function PresenceSidebar() {
 
   return (
     <div className="presence-panel">
-      <div className="presence-panel-title">Online — {sortedUsers.length}</div>
+      <div className="presence-title">Online — {sortedUsers.length}</div>
       {sortedUsers.map((u) => (
-        <div key={u.userId} className="presence-user">
-          <div className="presence-user-avatar">
+        <div key={u.userId} className="presence-item">
+          <div className="presence-avatar">
             {(u.userName || '?')[0].toUpperCase()}
             <div
-              className="presence-user-dot"
+              className="presence-dot"
               style={{
-                background: u.status === 'online' ? 'var(--success)' :
-                  u.status === 'away' ? 'var(--warning)' : 'var(--text-muted)',
+                background: u.status === 'online' ? 'var(--color-success)' :
+                  u.status === 'away' ? '#f59e0b' : 'var(--color-muted)',
                 boxShadow: u.status === 'online' ? '0 0 6px rgba(34,197,94,0.5)' : 'none',
               }}
             />
           </div>
-          <span className="presence-user-name">
+          <span className="presence-name">
             {u.userName}{u.userId === user?.id ? ' (you)' : ''}
           </span>
         </div>
       ))}
       {sortedUsers.length === 0 && (
-        <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '8px 10px' }}>
+        <div style={{ color: 'var(--color-muted)', fontSize: 13, padding: '8px' }}>
           No users online
         </div>
       )}

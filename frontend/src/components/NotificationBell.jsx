@@ -44,7 +44,7 @@ export default function NotificationBell() {
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setOpen(false)} />
           <div className="notification-dropdown">
-            <div className="notification-dropdown-header">
+            <div className="notification-header">
               <span>Notifications</span>
               {unreadCount > 0 && (
                 <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={markAllRead}>
@@ -58,8 +58,8 @@ export default function NotificationBell() {
               ) : (
                 notifications.slice(0, 20).map((n) => (
                   <div key={n._id} className={`notification-item ${!n.read ? 'unread' : ''}`}>
-                    <div className="notification-item-text">{n.message}</div>
-                    <div className="notification-item-time">{formatTime(n.createdAt)}</div>
+                    <div className="notification-text">{n.message}</div>
+                    <div className="notification-time">{formatTime(n.createdAt)}</div>
                   </div>
                 ))
               )}
