@@ -2,6 +2,70 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { getSocket, useSocketEvent } from '../hooks/useSocket';
 import { useApi } from '../hooks/useApi';
+import AIAssistantPanel from '../components/AIAssistantPanel';
+
+const AttachIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+  </svg>
+);
+
+const EmojiIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+
+const SendIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+  </svg>
+);
+
+const CheckIcon = () => (
+  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+  </svg>
+);
+
+const CheckDoubleIcon = () => (
+  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+
+const EyeIcon = () => (
+  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+  </svg>
+);
+
+function MessageSkeleton() {
+  return (
+    <div className="message-skeleton">
+      <div className="skeleton-avatar" />
+      <div className="skeleton-bubble">
+        <div className="skeleton-line short" />
+        <div className="skeleton-line" />
+      </div>
+    </div>
+  );
+}
+
+function TypingIndicator({ users }) {
+  const names = users.map(u => u.userName).join(', ');
+  return (
+    <div className="typing-indicator">
+      <div className="typing-bubble">
+        <span className="typing-dot" />
+        <span className="typing-dot" />
+        <span className="typing-dot" />
+      </div>
+      <span className="typing-text">{names} {users.length === 1 ? 'is' : 'are'} typing</span>
+    </div>
+  );
+}
 
 export default function Chat({ activeConvId, setActiveConvId, conversations, setConversations }) {
   const { user, token } = useAuth();
@@ -9,74 +73,56 @@ export default function Chat({ activeConvId, setActiveConvId, conversations, set
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [typingUsers, setTypingUsers] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showContactInfo, setShowContactInfo] = useState(false);
+  const [searchQuery, setSearchQuery] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [showAttachments, setShowAttachments] = useState(false);
+  const [showEmoji, setShowEmoji] = useState(false);
   const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
   const typingTimeout = useRef(null);
-  
-  
-  // Use refs to access latest state in socket event handlers (avoid stale closures)
+
   const activeConvIdRef = useRef(activeConvId);
   const setConversationsRef = useRef(setConversations);
   const setMessagesRef = useRef(setMessages);
   const setTypingUsersRef = useRef(setTypingUsers);
-  
-  // Keep refs updated
-  useEffect(() => {
-    activeConvIdRef.current = activeConvId;
-  }, [activeConvId]);
-  useEffect(() => {
-    setConversationsRef.current = setConversations;
-  }, [setConversations]);
-  useEffect(() => {
-    setMessagesRef.current = setMessages;
-  }, [setMessages]);
-  useEffect(() => {
-    setTypingUsersRef.current = setTypingUsers;
-  }, [setTypingUsers]);
 
-  // Clear messages and load new when conversation changes
+  useEffect(() => { activeConvIdRef.current = activeConvId; }, [activeConvId]);
+  useEffect(() => { setConversationsRef.current = setConversations; }, [setConversations]);
+  useEffect(() => { setMessagesRef.current = setMessages; }, [setMessages]);
+  useEffect(() => { setTypingUsersRef.current = setTypingUsers; }, [setTypingUsers]);
+
   useEffect(() => {
     if (!activeConvId) {
       setMessages([]);
       return;
     }
-    
-    // Clear existing messages immediately
+    setLoading(true);
     setMessages([]);
-    
-    // Load messages for new conversation
     apiFetch(`/chat/conversations/${activeConvId}/messages`)
-      .then(setMessages)
-      .catch(() => setMessages([]));
+      .then((data) => {
+        setMessages(data || []);
+        setLoading(false);
+      })
+      .catch(() => {
+        setMessages([]);
+        setLoading(false);
+      });
   }, [activeConvId]);
 
-  // Join conversation room and leave previous one
   useEffect(() => {
     if (!token) return;
     const s = getSocket(token);
-    
-    if (activeConvId) {
-      s.emit('chat:join', activeConvId);
-    }
-    
-    // Cleanup: leave conversation when component unmounts or conversation changes
+    if (activeConvId) s.emit('chat:join', activeConvId);
     return () => {
-      if (activeConvId) {
-        s.emit('chat:leave', activeConvId);
-      }
+      if (activeConvId) s.emit('chat:leave', activeConvId);
     };
   }, [activeConvId, token]);
 
-  // Listen for new messages - use refs to avoid stale closures
   useSocketEvent('message:new', (msg) => {
     const currentConvId = activeConvIdRef.current;
-    
     if (msg.conversationId === currentConvId) {
       setMessagesRef.current((prev) => [...prev, msg]);
     }
-    
-    // Update conversation list's last message
     setConversationsRef.current((prev) =>
       prev.map((c) =>
         c._id === msg.conversationId ? { ...c, lastMessage: msg.content, updatedAt: msg.createdAt } : c
@@ -84,72 +130,112 @@ export default function Chat({ activeConvId, setActiveConvId, conversations, set
     );
   }, []);
 
-  // Typing indicators - use refs to avoid stale closures
   useSocketEvent('message:typing', (data) => {
     const currentConvId = activeConvIdRef.current;
     if (data.conversationId !== currentConvId) return;
-    
     setTypingUsersRef.current((prev) => {
       if (prev.find((u) => u.userId === data.userId)) return prev;
       return [...prev, data];
     });
-    
-    // Auto-remove typing indicator after 3 seconds
     setTimeout(() => {
       setTypingUsersRef.current((prev) => prev.filter((u) => u.userId !== data.userId));
     }, 3000);
   }, []);
 
-  // Scroll to bottom on new messages
+  useSocketEvent('message:status', (data) => {
+    setMessagesRef.current((prev) =>
+      prev.map((m) => m._id === data.messageId ? { ...m, status: data.status } : m)
+    );
+  }, []);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  function handleSend(e) {
-    e.preventDefault();
+  const handleSend = useCallback((e) => {
+    e?.preventDefault();
     if (!input.trim() || !activeConvId) return;
     const s = getSocket(token);
     s.emit('message:send', { conversationId: activeConvId, content: input.trim() });
     setInput('');
-  }
+  }, [input, activeConvId, token]);
 
-  function handleInputChange(e) {
+  const handleInputChange = useCallback((e) => {
     setInput(e.target.value);
     const s = getSocket(token);
     if (typingTimeout.current) clearTimeout(typingTimeout.current);
     s.emit('message:typing', { conversationId: activeConvId });
     typingTimeout.current = setTimeout(() => {}, 3000);
-  }
+  }, [activeConvId, token]);
 
-  function formatTime(ts) {
-    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
+  const handleKeyDown = useCallback((e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  }, [handleSend]);
+
+  const formatTime = (ts) => {
+    const date = new Date(ts);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    if (isToday) {
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + 
+           date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const groupMessages = (msgs) => {
+    const groups = [];
+    let currentGroup = null;
+    msgs.forEach((msg) => {
+      const isOwn = (msg.senderId === user.id) || (msg.senderId?._id === user.id);
+      if (!currentGroup || currentGroup.isOwn !== isOwn || 
+          new Date(msg.createdAt) - new Date(currentGroup.lastTime) > 300000) {
+        currentGroup = { isOwn, messages: [msg], firstTime: msg.createdAt, lastTime: msg.createdAt };
+        groups.push(currentGroup);
+      } else {
+        currentGroup.messages.push(msg);
+        currentGroup.lastTime = msg.createdAt;
+      }
+    });
+    return groups;
+  };
+
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'sent': return <CheckIcon />;
+      case 'delivered': return <CheckDoubleIcon />;
+      case 'seen': return <EyeIcon />;
+      default: return null;
+    }
+  };
+
+  const filteredConversations = conversations.filter(c => {
+    const displayName = c.name || c.participants?.map(p => p.name || 'User').join(', ') || 'Chat';
+    return displayName.toLowerCase().includes(searchQuery.toLowerCase());
+  });
 
   if (!activeConvId) {
     return (
       <div className="chat-layout">
-        {/* Left Panel - Chats List */}
         <div className="chat-sidebar">
           <div className="chat-sidebar-header">
             <h2 className="chat-sidebar-title">Conversations</h2>
             <div className="chat-search">
               <span className="chat-search-icon">🔍</span>
-            <input 
-              type="text" 
-              className="chat-search-input"
-              placeholder="Search..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+              <input 
+                type="text" 
+                className="chat-search-input"
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
           </div>
           <div className="chat-list">
-            {conversations
-              .filter(c => {
-                const displayName = c.name || c.participants?.map(p => p.name || 'User').join(', ') || 'Chat';
-                return displayName.toLowerCase().includes(searchQuery.toLowerCase());
-              })
-              .map((conv) => {
+            {filteredConversations.map((conv) => {
               const displayName = conv.name || conv.participants?.filter((p) => (p._id || p) !== user.id).map((p) => p.name || 'User').join(', ') || 'Chat';
               const isActive = activeConvId === conv._id;
               return (
@@ -176,21 +262,11 @@ export default function Chat({ activeConvId, setActiveConvId, conversations, set
             })}
           </div>
         </div>
-
-        {/* Center Panel - Empty Chat Area */}
         <div className="chat-main">
           <div className="empty-state">
             <div className="empty-icon">💬</div>
             <div className="empty-title">Select a conversation</div>
             <div className="empty-hint">Choose from the sidebar to start chatting</div>
-          </div>
-        </div>
-
-        {/* Right Panel - Contact Info (placeholder) */}
-        <div className="contact-panel">
-          <div className="contact-empty">
-            <div className="empty-icon">👤</div>
-            <div className="empty-hint">Select a chat to view contact info</div>
           </div>
         </div>
       </div>
@@ -199,10 +275,10 @@ export default function Chat({ activeConvId, setActiveConvId, conversations, set
 
   const activeConv = conversations.find((c) => c._id === activeConvId);
   const displayName = activeConv?.name || activeConv?.participants?.filter((p) => (p._id || p) !== user.id).map((p) => p.name || 'User').join(', ') || 'Chat';
+  const messageGroups = groupMessages(messages);
 
-return (
+  return (
     <div className="chat-layout">
-      {/* Left Panel - Chats List */}
       <div className="chat-sidebar">
         <div className="chat-sidebar-header">
           <h2 className="chat-sidebar-title">Conversations</h2>
@@ -218,13 +294,8 @@ return (
           </div>
         </div>
         <div className="chat-list">
-          {conversations
-            .filter(c => {
-              const name = c.name || c.participants?.map(p => p.name || 'User').join(', ') || 'Chat';
-              return name.toLowerCase().includes(searchQuery.toLowerCase());
-            })
-            .map((conv) => {
-            const name = c.name || conv.participants?.filter((p) => (p._id || p) !== user.id).map((p) => p.name || 'User').join(', ') || 'Chat';
+          {filteredConversations.map((conv) => {
+            const name = conv.name || conv.participants?.filter((p) => (p._id || p) !== user.id).map((p) => p.name || 'User').join(', ') || 'Chat';
             const isActive = activeConvId === conv._id;
             return (
               <div
@@ -251,7 +322,6 @@ return (
         </div>
       </div>
 
-      {/* Center Panel - Chat Area */}
       <div className="chat-main">
         <div className="chat-header">
           <div className="chat-header-info">
@@ -269,57 +339,80 @@ return (
         </div>
 
         <div className="messages-panel">
-          {messages.map((msg) => {
-            const isOwn = (msg.senderId === user.id) || (msg.senderId?._id === user.id);
-            return (
-              <div key={msg._id} className={`message ${isOwn ? 'own' : ''}`}>
-                {!isOwn && (
-                  <div className="message-avatar">
-                    {(msg.senderName || msg.senderId?.name || '?')[0].toUpperCase()}
-                  </div>
-                )}
-                <div className="message-bubble">
-                  {!isOwn && (
-                    <div className="message-sender">
-                      {msg.senderName || msg.senderId?.name || 'Unknown'}
-                    </div>
-                  )}
-                  <div className="message-text">{msg.content}</div>
-                  <div className="message-time">{formatTime(msg.createdAt)}</div>
+          {loading ? (
+            <>
+              <MessageSkeleton />
+              <MessageSkeleton />
+              <MessageSkeleton />
+            </>
+          ) : messageGroups.map((group, gIdx) => (
+            <div key={gIdx} className={`message-group ${group.isOwn ? 'own' : ''}`}>
+              {!group.isOwn && (
+                <div className="message-avatar">
+                  {group.messages[0].senderName?.[0]?.toUpperCase() || '?'}
                 </div>
+              )}
+              <div className="message-bubbles">
+                {group.messages.map((msg) => (
+                  <div key={msg._id} className="message-bubble-entry">
+                    <div className="message-bubble">
+                      <div className="message-text">{msg.content}</div>
+                      <div className="message-meta">
+                        <span className="message-time">{formatTime(msg.createdAt)}</span>
+                        {group.isOwn && (
+                          <span className={`message-status ${msg.status || 'sent'}`}>
+                            {getStatusIcon(msg.status)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
-            );
-          })}
+            </div>
+          ))}
+          {typingUsers.length > 0 && <TypingIndicator users={typingUsers} />}
           <div ref={messagesEndRef} />
         </div>
 
-        {typingUsers.length > 0 && (
-          <div className="typing-indicator">
-            <div className="typing-dots">
-              <span /><span /><span />
-            </div>
-            {typingUsers.map((u) => u.userName).join(', ')} typing...
-          </div>
-        )}
-
         <div className="chat-input-panel">
+          <div className="chat-input-tools">
+            <button 
+              className="chat-tool-btn" 
+              onClick={() => setShowAttachments(!showAttachments)}
+              title="Attach file"
+            >
+              <AttachIcon />
+            </button>
+            <button 
+              className="chat-tool-btn" 
+              onClick={() => setShowEmoji(!showEmoji)}
+              title="Add emoji"
+            >
+              <EmojiIcon />
+            </button>
+          </div>
           <form className="chat-input-form" onSubmit={handleSend}>
-            <input
+            <textarea
+              ref={inputRef}
               className="chat-input"
-              placeholder="Type a message..."
+              placeholder="Type a message... (Enter to send, Shift+Enter for new line)"
               value={input}
               onChange={handleInputChange}
-              id="chat-message-input"
+              onKeyDown={handleKeyDown}
+              rows={1}
             />
-            <button type="submit" className="btn btn-primary">
-              Send
+            <button type="submit" className="btn btn-primary chat-send-btn" disabled={!input.trim()}>
+              <SendIcon />
             </button>
           </form>
+          <div className="chat-input-hint">Enter to send • Shift+Enter for new line</div>
         </div>
+
+        <AIAssistantPanel context={messages} contextType="chat" />
       </div>
 
-      {/* Right Panel - Contact Info */}
-      <div className={`contact-panel ${showContactInfo ? '' : ''}`}>
+      <div className="contact-panel">
         <div className="contact-header">
           <div className="contact-avatar-large">{displayName[0].toUpperCase()}</div>
           <div className="contact-name">{displayName}</div>

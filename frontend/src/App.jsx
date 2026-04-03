@@ -6,9 +6,26 @@ import Login from './pages/Login';
 import Chat from './pages/Chat';
 import Editor from './pages/Editor';
 import Workspace from './pages/Workspace';
-import PresenceSidebar from './components/PresenceSidebar';
 import NotificationBell from './components/NotificationBell';
 import NewConvModal from './components/NewConvModal';
+
+const MenuIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+  </svg>
+);
+
+const PanelRightIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+  </svg>
+);
+
+const PanelLeftIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+  </svg>
+);
 
 // Icons as simple SVG components
 const HomeIcon = () => (
@@ -78,7 +95,7 @@ function AppShell() {
   const { connected } = useSocket(token);
   const { apiFetch } = useApi();
 
-  const [view, setView] = useState('workspace'); // 'home' | 'shared' | 'chat' | 'editor' | 'workspace'
+  const [view, setView] = useState('workspace');
   const [activeNav, setActiveNav] = useState('home');
   const [conversations, setConversations] = useState([]);
   const [activeConvId, setActiveConvId] = useState(null);
@@ -87,20 +104,44 @@ function AppShell() {
   const [showNewConv, setShowNewConv] = useState(false);
   const [showNewDoc, setShowNewDoc] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState([]);
 
-  // Load conversations
   useEffect(() => {
     if (!token) return;
     apiFetch('/chat/conversations').then(setConversations).catch(() => {});
   }, [token]);
 
-  // Load documents
   useEffect(() => {
     if (!token) return;
     apiFetch('/docs').then(setDocuments).catch(() => {});
   }, [token]);
 
-  // Handle new conversation created by another user
+  useEffect(() => {
+    if (!token || !connected) return;
+    const socket = getSocket(token);
+    const handleInit = (users) => setOnlineUsers(users);
+    const handleUpdate = (data) => {
+      setOnlineUsers((prev) => {
+        const existing = prev.findIndex((u) => u.userId === data.userId);
+        if (data.status === 'offline') return prev.filter((u) => u.userId !== data.userId);
+        if (existing >= 0) {
+          const updated = [...prev];
+          updated[existing] = { ...updated[existing], ...data };
+          return updated;
+        }
+        return [...prev, data];
+      });
+    };
+    socket.on('presence:init', handleInit);
+    socket.on('presence:update', handleUpdate);
+    return () => {
+      socket.off('presence:init', handleInit);
+      socket.off('presence:update', handleUpdate);
+    };
+  }, [token, connected]);
+
   useSocketEvent('conversation:new', (conv) => {
     setConversations((prev) => {
       if (prev.find((c) => c._id === conv._id)) return prev;
@@ -108,7 +149,6 @@ function AppShell() {
     });
   }, []);
 
-  // Handle conversation updates (new messages from other users)
   useSocketEvent('conversation:updated', (data) => {
     setConversations((prev) =>
       prev.map((c) =>
@@ -129,6 +169,9 @@ function AppShell() {
     setView('editor');
   }
 
+  const toggleMobileSidebar = () => setMobileSidebarOpen(!mobileSidebarOpen);
+  const toggleRightPanel = () => setRightPanelOpen(!rightPanelOpen);
+
   if (loading) {
     return (
       <div className="loading-page">
@@ -141,36 +184,41 @@ function AppShell() {
   if (!user) return <Login />;
 
   return (
-    <div className="app-shell">
-      <aside className="app-sidebar">
-        <div className="app-search">
-          <SearchIcon />
-          <input
-            type="text"
-            placeholder="Search..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+    <div className="layout-container">
+      <div className={`layout-sidebar ${mobileSidebarOpen ? 'open' : ''}`}>
+        <div className="layout-sidebar-header">
+          <button className="mobile-menu-btn" onClick={toggleMobileSidebar}>
+            <MenuIcon />
+          </button>
+          <div className="app-search">
+            <SearchIcon />
+            <input
+              type="text"
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
         </div>
 
         <nav className="app-nav">
           <button
             className={`app-nav-item ${activeNav === 'home' ? 'active' : ''}`}
-            onClick={() => { setActiveNav('home'); setView('workspace'); }}
+            onClick={() => { setActiveNav('home'); setView('workspace'); setMobileSidebarOpen(false); }}
           >
             <HomeIcon />
             <span>Home</span>
           </button>
           <button
             className={`app-nav-item ${activeNav === 'shared' ? 'active' : ''}`}
-            onClick={() => { setActiveNav('shared'); setView('workspace'); }}
+            onClick={() => { setActiveNav('shared'); setView('workspace'); setMobileSidebarOpen(false); }}
           >
             <ShareIcon />
             <span>Shared with me</span>
           </button>
           <button
             className={`app-nav-item ${activeNav === 'chat' ? 'active' : ''}`}
-            onClick={() => { setActiveNav('chat'); setView('chat'); }}
+            onClick={() => { setActiveNav('chat'); setView('chat'); setMobileSidebarOpen(false); }}
           >
             <ChatIcon />
             <span>Chat</span>
@@ -189,11 +237,30 @@ function AppShell() {
               <button
                 key={space.id}
                 className="app-space-item"
-                onClick={() => { setActiveNav('home'); setView('workspace'); }}
+                onClick={() => { setActiveNav('home'); setView('workspace'); setMobileSidebarOpen(false); }}
               >
                 <span>{space.icon}</span>
                 <span className="truncate">{space.name}</span>
               </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="presence-section">
+          <div className="presence-section-header">
+            <span>Online</span>
+            <span className="presence-count">{onlineUsers.length}</span>
+          </div>
+          <div className="presence-list">
+            {onlineUsers.slice(0, 5).map((u) => (
+              <div key={u.userId} className="presence-item-compact">
+                <div className="presence-avatar-compact" style={{
+                  background: u.status === 'online' ? 'var(--color-success)' : '#f59e0b'
+                }}>
+                  {(u.userName || '?')[0].toUpperCase()}
+                </div>
+                <span className="truncate">{u.userName}</span>
+              </div>
             ))}
           </div>
         </div>
@@ -209,20 +276,27 @@ function AppShell() {
             <LogoutIcon />
           </button>
         </div>
-      </aside>
+      </div>
 
-      <main className="app-main">
-        <header className="app-main-header">
-          <div className="app-breadcrumb">
-            <span className="app-breadcrumb-path">
-              {activeNav === 'home' ? 'Home' : activeNav === 'shared' ? 'Shared with me' : 'Chat'}
-            </span>
-            <span className="app-breadcrumb-sep">/</span>
-            <span className="app-breadcrumb-current">
-              {view === 'workspace' ? 'Team Hub' : view === 'chat' ? 'Conversations' : 'Documents'}
-            </span>
+      <div className={`layout-sidebar-backdrop ${mobileSidebarOpen ? 'visible' : ''}`} onClick={toggleMobileSidebar} />
+
+      <main className="layout-main">
+        <header className="layout-main-header">
+          <div className="header-left">
+            <button className="mobile-menu-btn desktop-hidden" onClick={toggleMobileSidebar}>
+              <MenuIcon />
+            </button>
+            <div className="app-breadcrumb">
+              <span className="app-breadcrumb-path">
+                {activeNav === 'home' ? 'Home' : activeNav === 'shared' ? 'Shared with me' : 'Chat'}
+              </span>
+              <span className="app-breadcrumb-sep">/</span>
+              <span className="app-breadcrumb-current">
+                {view === 'workspace' ? 'Team Hub' : view === 'chat' ? 'Conversations' : 'Documents'}
+              </span>
+            </div>
           </div>
-          <div className="app-main-actions">
+          <div className="header-right">
             <NotificationBell />
             <div className="app-status">
               {connected ? (
@@ -231,33 +305,82 @@ function AppShell() {
                 <span>Offline</span>
               )}
             </div>
+            <button className="layout-right-panel-toggle" onClick={toggleRightPanel} title="Toggle panel">
+              {rightPanelOpen ? <PanelRightIcon /> : <PanelLeftIcon />}
+            </button>
           </div>
         </header>
 
-        <div className="app-content">
-          {view === 'workspace' ? (
-            <Workspace />
-          ) : view === 'chat' ? (
-            <Chat
-              activeConvId={activeConvId}
-              setActiveConvId={setActiveConvId}
-              conversations={conversations}
-              setConversations={setConversations}
-            />
-          ) : (
-            <Editor
-              activeDocId={activeDocId}
-              setActiveDocId={setActiveDocId}
-              documents={documents}
-              setDocuments={setDocuments}
-            />
-          )}
+        <div className="layout-main-content">
+          <div className="layout-content-panel">
+            {view === 'workspace' ? (
+              <Workspace />
+            ) : view === 'chat' ? (
+              <Chat
+                activeConvId={activeConvId}
+                setActiveConvId={setActiveConvId}
+                conversations={conversations}
+                setConversations={setConversations}
+              />
+            ) : (
+              <Editor
+                activeDocId={activeDocId}
+                setActiveDocId={setActiveDocId}
+                documents={documents}
+                setDocuments={setDocuments}
+              />
+            )}
+          </div>
+
+          <aside className={`layout-right-panel ${rightPanelOpen ? '' : 'collapsed'}`}>
+            <div className="layout-right-panel-header">
+              <span className="panel-title">Context</span>
+              <button className="layout-right-panel-toggle" onClick={toggleRightPanel}>
+                <PanelRightIcon />
+              </button>
+            </div>
+            <div className="layout-right-panel-content">
+              <div className="context-section">
+                <div className="context-section-header">Active Users</div>
+                <div className="context-user-list">
+                  {onlineUsers.map((u) => (
+                    <div key={u.userId} className="context-user-item">
+                      <div className="context-user-avatar">
+                        {(u.userName || '?')[0].toUpperCase()}
+                        <span className={`context-status-dot ${u.status}`} />
+                      </div>
+                      <div className="context-user-info">
+                        <span className="context-user-name">{u.userName}</span>
+                        <span className="context-user-status">{u.status}</span>
+                      </div>
+                    </div>
+                  ))}
+                  {onlineUsers.length === 0 && (
+                    <div className="context-empty">No users online</div>
+                  )}
+                </div>
+              </div>
+              <div className="context-section">
+                <div className="context-section-header">Recent Activity</div>
+                <div className="context-activity-list">
+                  {conversations.slice(0, 5).map((c) => (
+                    <div key={c._id} className="context-activity-item">
+                      <div className="context-activity-icon">💬</div>
+                      <div className="context-activity-info">
+                        <span className="context-activity-title">{c.name || 'Conversation'}</span>
+                        <span className="context-activity-time">
+                          {c.lastMessage ? new Date(c.updatedAt).toLocaleTimeString() : ''}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </aside>
         </div>
       </main>
 
-      <PresenceSidebar />
-
-      {/* ===== Modals ===== */}
       {showNewConv && (
         <NewConvModal
           onClose={() => setShowNewConv(false)}
