@@ -45,7 +45,9 @@ export default function Login() {
       </Suspense>
       
       <form className="auth-card" onSubmit={handleSubmit}>
-        <img src="/logo.png" alt="OneChat" className="auth-logo" />
+        <div className="auth-logo-container">
+          <img src="/logo.png" alt="OneChat" className="auth-logo" />
+        </div>
         <h1 className="auth-title">{isRegister ? 'Create Account' : 'Welcome Back'}</h1>
         <p className="auth-subtitle">
           {isRegister ? 'Join OneChat and start collaborating' : 'Sign in to continue to OneChat'}

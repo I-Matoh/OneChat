@@ -12,9 +12,6 @@ build/
 
 .agent
 .claude
-skills
-.claude/ 
-
 
 # Logs
 *.log
