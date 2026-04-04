@@ -281,7 +281,6 @@ export default function Editor({ activeDocId, setActiveDocId, documents, setDocu
           <div className="ai-panel-title">
             <MaterialIcon icon="auto_awesome" />
             Assistant
-            <span className="ai-panel-badge">Beta</span>
           </div>
           <button className="ai-panel-close" onClick={() => setShowAI(false)}>
             <MaterialIcon icon="close" />

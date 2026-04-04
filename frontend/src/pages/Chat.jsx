@@ -274,6 +274,7 @@ export default function Chat({ activeConvId, setActiveConvId, conversations, set
   }
 
   const activeConv = conversations.find((c) => c._id === activeConvId);
+  const otherParticipants = activeConv?.participants?.filter((p) => (p._id || p) !== user.id) || [];
   const displayName = activeConv?.name || activeConv?.participants?.filter((p) => (p._id || p) !== user.id).map((p) => p.name || 'User').join(', ') || 'Chat';
   const messageGroups = groupMessages(messages);
   const participantStatus = activeConv?.participants?.some((participant) => participant.status === 'online') ? 'Online' : 'Away';
@@ -420,18 +421,18 @@ export default function Chat({ activeConvId, setActiveConvId, conversations, set
           <div className="contact-status">{participantStatus}</div>
         </div>
         <div className="contact-details">
-          <div className="contact-section">
-            <div className="contact-label">About</div>
-            <div className="contact-value">Hey there! I'm using OneChat</div>
-          </div>
-          <div className="contact-section">
-            <div className="contact-label">Phone</div>
-            <div className="contact-value">+1 234 567 8900</div>
-          </div>
-          <div className="contact-section">
-            <div className="contact-label">Email</div>
-            <div className="contact-value">user@example.com</div>
-          </div>
+          {otherParticipants.map((participant) => (
+            <div key={participant._id || participant.id} className="contact-section">
+              <div className="contact-label">{participant.name || 'User'}</div>
+              <div className="contact-value">{participant.email || 'No email available'}</div>
+            </div>
+          ))}
+          {otherParticipants.length === 0 && (
+            <div className="contact-section">
+              <div className="contact-label">Conversation details</div>
+              <div className="contact-value">No participant metadata available.</div>
+            </div>
+          )}
         </div>
         <div className="contact-actions">
           <button className="contact-action-btn">

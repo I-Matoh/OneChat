@@ -4,18 +4,22 @@ import React, { useState, useEffect } from "react";
 import {
   Eye,
   EyeOff,
-  Github,
-  Twitter,
-  Linkedin,
+  GitFork,
+  AtSign,
+  Globe,
   Sun,
   Moon,
 } from "lucide-react";
 import "../../index.css";
 import { useAuth } from "../../hooks/useAuth";
 
-const AnimatedSignIn: React.FC = () => {
+interface AnimatedSignInProps {
+  initialMode?: "login" | "register";
+}
+
+const AnimatedSignIn: React.FC<AnimatedSignInProps> = ({ initialMode = "login" }) => {
   const { login, register } = useAuth();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register">(initialMode);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -294,13 +298,13 @@ const AnimatedSignIn: React.FC = () => {
 
           <div className="social-login">
             <button className="social-button github" type="button">
-              <Github size={18} />
+              <GitFork size={18} />
             </button>
             <button className="social-button twitter" type="button">
-              <Twitter size={18} />
+              <AtSign size={18} />
             </button>
             <button className="social-button linkedin" type="button">
-              <Linkedin size={18} />
+              <Globe size={18} />
             </button>
           </div>
 
@@ -325,3 +329,5 @@ const AnimatedSignIn: React.FC = () => {
 };
 
 export default AnimatedSignIn;
+
+

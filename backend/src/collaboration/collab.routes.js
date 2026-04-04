@@ -1,6 +1,8 @@
 const { Router } = require('express');
 const { authMiddleware } = require('../middleware/auth');
 const Document = require('../models/Document');
+const { getGlobalIo } = require('../websocket/socketServer');
+const { logActivity } = require('../activity/activity.service');
 
 const router = Router();
 
@@ -26,6 +28,12 @@ router.post('/', authMiddleware, async (req, res) => {
       revision: 0,
       collaborators: [req.user.id],
     });
+    await logActivity(getGlobalIo(), {
+      actorId: req.user.id,
+      type: 'document_created',
+      message: `Created document "${doc.title}"`,
+      meta: { docId: doc._id.toString() },
+    });
     res.status(201).json(doc);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -40,6 +48,12 @@ router.get('/:id', authMiddleware, async (req, res) => {
       collaborators: req.user.id,
     }).populate('collaborators', 'name email status');
     if (!doc) return res.status(404).json({ error: 'Document not found' });
+    await logActivity(getGlobalIo(), {
+      actorId: req.user.id,
+      type: 'document_updated',
+      message: `Updated document "${doc.title}"`,
+      meta: { docId: doc._id.toString() },
+    });
     res.json(doc);
   } catch (err) {
     res.status(500).json({ error: err.message });

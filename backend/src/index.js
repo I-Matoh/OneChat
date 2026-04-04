@@ -58,6 +58,7 @@ const aiRoutes           = require('./ai/ai.routes');
 const workspaceRoutes    = require('./workspace/workspace.routes');
 const searchRoutes       = require('./search/search.routes');
 const taskRoutes         = require('./tasks/task.routes');
+const activityRoutes     = require('./activity/activity.routes');
 
 /**
  * Express application setup
@@ -107,6 +108,7 @@ app.use('/ai', aiRoutes);
 app.use('/workspaces', workspaceRoutes);
 app.use('/search', searchRoutes);
 app.use('/tasks', taskRoutes);
+app.use('/activity', activityRoutes);
 
 /**
  * Health check endpoint
@@ -129,6 +131,7 @@ app.use((req, res) => {
 const io = new Server(server, {
   cors: { origin: process.env.CLIENT_URL, credentials: true },
 });
+app.set('io', io);
 initSocketServer(io);
 
 /**

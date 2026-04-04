@@ -1,6 +1,7 @@
 const Document = require('../models/Document');
 const { createNotification } = require('../notifications/notification.service');
 const { mergeTextWithConflicts } = require('./merge.service');
+const { logActivity } = require('../activity/activity.service');
 
 // In-memory cursor positions per document
 const cursors = new Map(); // docId -> Map(userId -> { line, ch, userName })
@@ -106,6 +107,12 @@ function registerCollabHandlers(io, socket) {
         conflict,
         editedBy: socket.user.id,
         editorName: socket.user.name,
+      });
+      await logActivity(io, {
+        actorId: socket.user.id,
+        type: 'document_realtime_updated',
+        message: `Edited document "${nextTitle}"`,
+        meta: { docId, revision: nextRevision, conflict },
       });
 
       // Notify collaborators

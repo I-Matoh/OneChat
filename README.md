@@ -1,43 +1,61 @@
-# OneChat — Real-Time Collaboration Platform
+# OneChat - Real-Time Collaboration Workspace
 
+OneChat is a full-stack collaboration app with chat, live documents, workspace pages, task workflows, and AI-assisted action extraction.
 
+## Live App
 
+https://one-chat-ten.vercel.app/
 
-try it here!!!
+## Core Features
 
-https://one-chat-ten.vercel.app/ 
+- JWT auth (`/auth/register`, `/auth/login`, `/auth/me`)
+- Real-time chat with typing + message statuses
+- Collaborative docs with revision-aware realtime sync events
+- Workspace + page management
+- Role-based permissions (`owner/admin/editor/commenter/viewer`)
+- Task management API and UI
+- AI assistant + AI action extraction with optional Groq provider
+- Presence + notification system
 
+## Stack
 
+| Layer | Technology |
+| --- | --- |
+| Frontend | React 18, Vite, Socket.IO Client |
+| Backend | Node.js, Express, Socket.IO |
+| Database | MongoDB (Mongoose) |
+| Cache / Pub-Sub | Redis (ioredis) |
+| Auth | JWT + bcrypt |
+| AI (optional) | Groq Chat Completions API |
 
+## Environment Variables
 
+Create `backend/.env`:
 
+```env
+PORT=5000
+CLIENT_URL=http://localhost:5173
+MONGO_URI=your_mongo_uri
+REDIS_URL=your_redis_url
+JWT_SECRET=your_very_long_jwt_secret_min_32_chars
 
-A full-stack real-time collaboration app for remote teams, developers, and students.
+# Optional AI provider
+GROQ_API_KEY=your_groq_key
+GROQ_MODEL=llama-3.3-70b-versatile
+```
 
-## Features
-
-- **Real-Time Chat** — instant messaging with typing indicators and delivery status
-- **Live Document Editing** — collaborative editor with cursor presence
-- **User Presence** — online/away/offline with WebSocket heartbeat
-- **Notifications** — in-app alerts for messages, edits, and mentions
-- **JWT Authentication** — secure registration and login
-
-## Tech Stack
-
-| Layer           | Technology                       |
-| --------------- | -------------------------------- |
-| Frontend        | React 18, Vite, Socket.IO Client |
-| Backend         | Node.js, Express, Socket.IO      |
-| Database        | MongoDB (Mongoose)               |
-| Cache / Pub-Sub | Redis (ioredis)                  |
-| Auth            | JWT + bcrypt                     |
+If `GROQ_API_KEY` is missing, AI routes use a local fallback summarizer/extractor.
 
 ## Quick Start
 
-### 1. Start MongoDB & Redis
+### 1. Infrastructure
 
-- **Cloud (Current):** Update `MONGO_URI` and `REDIS_URL` in `backend/.env`.
-- **Docker:** Run `docker-compose up -d` for local development.
+- Start MongoDB + Redis (local or cloud).
+- Optional local Docker:
+
+```bash
+docker-compose up -d
+```
 
 ### 2. Backend
 
@@ -47,37 +65,116 @@ npm install
 npm run dev
 ```
 
-Runs on `http://localhost:5000`
+Backend runs on `http://localhost:5000`.
 
 ### 3. Frontend
 
 ```bash
 cd frontend
-npm install
+npm install 
 npm run dev
 ```
 
-Runs on `http://localhost:5173`
+Frontend runs on `http://localhost:5173`.
+
+## API Overview
+
+### Auth and Core
+
+- `POST /auth/register`
+- `POST /auth/login`
+- `GET /auth/me`
+- `GET /users`
+- `GET /health`
+
+### Chat
+
+- `GET /chat/conversations`
+- `POST /chat/conversations`
+- `GET /chat/conversations/:id/messages`
+
+### Docs
+
+- `GET /docs`
+- `POST /docs`
+- `GET /docs/:id`
+- `PATCH /docs/:id`
+
+### Workspaces and Pages
+
+- `GET /workspaces`
+- `POST /workspaces`
+- `GET /workspaces/:workspaceId/pages`
+- `POST /workspaces/:workspaceId/pages`
+- `PATCH /workspaces/pages/:pageId`
+- `DELETE /workspaces/pages/:pageId`
+
+### Workspace Members / Roles
+
+- `GET /workspaces/:workspaceId/members`
+- `POST /workspaces/:workspaceId/members`
+- `PATCH /workspaces/:workspaceId/members/:memberUserId`
+- `DELETE /workspaces/:workspaceId/members/:memberUserId`
+
+### Tasks
+
+- `GET /tasks?workspaceId=...`
+- `POST /tasks`
+- `PATCH /tasks/:taskId`
+- `DELETE /tasks/:taskId`
+
+### AI
+
+- `POST /ai/assistant`
+- `POST /ai/extract-actions`
+
+### Search
+
+- `GET /search?q=...`
+
+## Real-Time Events
+
+### Chat
+
+- `chat:join`, `chat:leave`
+- `message:send`, `message:new`, `message:typing`
+- `message:status`
+
+### Collaboration
+
+- `doc:join`, `doc:leave`
+- `doc:update`
+- `doc:sync`, `doc:ack`, `doc:sync-request`
+- `doc:cursor`, `doc:cursors`
+
+### Presence and Notifications
+
+- `presence:init`, `presence:update`
+- `notification:new`
 
 ## Project Structure
 
-```
+```text
 OneChat/
-├── backend/
-│   └── src/
-│       ├── auth/           # Registration, login, JWT
-│       ├── chat/           # Messaging, conversations
-│       ├── collaboration/  # Document editing
-│       ├── presence/       # Online status tracking
-│       ├── notifications/  # In-app alerts
-│       ├── websocket/      # Socket.IO server
-│       ├── models/         # Mongoose schemas
-│       ├── middleware/     # Auth, rate-limiter
-│       └── config/         # DB, Redis connections
-├── frontend/
-│   └── src/
-│       ├── pages/          # Login, Chat, Editor
-│       ├── components/     # PresenceSidebar, NotificationBell
-│       └── hooks/          # useSocket, useAuth, useApi
-└── docker-compose.yml
+  backend/src/
+    ai/
+    auth/
+    chat/
+    collaboration/
+    notifications/
+    presence/
+    search/
+    tasks/
+    workspace/
+    websocket/
+    middleware/
+    models/
+  frontend/src/
+    pages/
+    components/
+    hooks/
 ```
+
+## Current Roadmap
+
+See [IMPLEMENTATION_PLAN.md](c:/Users/ADMIN/OneChat/IMPLEMENTATION_PLAN.md).

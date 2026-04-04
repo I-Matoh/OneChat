@@ -3,6 +3,8 @@ const { authMiddleware } = require('../middleware/auth');
 const { validateTaskCreate, validateTaskPatch } = require('../middleware/validate');
 const Task = require('../models/Task');
 const { getWorkspaceForUser, hasRole } = require('../workspace/workspace.access');
+const { getGlobalIo } = require('../websocket/socketServer');
+const { logActivity } = require('../activity/activity.service');
 
 const router = Router();
 
@@ -51,6 +53,13 @@ router.post('/', authMiddleware, validateTaskCreate, async (req, res) => {
     });
 
     const populated = await task.populate('assigneeId', 'name email status');
+    await logActivity(getGlobalIo(), {
+      actorId: req.user.id,
+      workspaceId,
+      type: 'task_created',
+      message: `Created task "${task.title}"`,
+      meta: { taskId: task._id.toString() },
+    });
     return res.status(201).json(populated);
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -77,6 +86,13 @@ router.patch('/:taskId', authMiddleware, validateTaskPatch, async (req, res) => 
     const updated = await Task.findByIdAndUpdate(task._id, { $set: updates }, { new: true })
       .populate('assigneeId', 'name email status')
       .populate('createdBy', 'name email');
+    await logActivity(getGlobalIo(), {
+      actorId: req.user.id,
+      workspaceId: task.workspaceId,
+      type: 'task_updated',
+      message: `Updated task "${updated.title}"`,
+      meta: { taskId: updated._id.toString(), status: updated.status },
+    });
     return res.json(updated);
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -94,6 +110,13 @@ router.delete('/:taskId', authMiddleware, async (req, res) => {
     }
 
     await Task.findByIdAndDelete(task._id);
+    await logActivity(getGlobalIo(), {
+      actorId: req.user.id,
+      workspaceId: task.workspaceId,
+      type: 'task_deleted',
+      message: `Deleted task "${task.title}"`,
+      meta: { taskId: task._id.toString() },
+    });
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ error: err.message });

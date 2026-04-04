@@ -1,404 +1,366 @@
-import { useState } from 'react';
-import { useAuth } from '../hooks/useAuth';
-import { useSocket, getSocket } from '../hooks/useSocket';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApi } from '../hooks/useApi';
 
-const MaterialIcon = ({ className, children }) => (
-  <span className={`material-symbols-outlined ${className || ''}`}>{children}</span>
-);
-
-const TagIcon = () => <MaterialIcon>tag</MaterialIcon>;
-const GridViewIcon = () => <MaterialIcon>grid_view</MaterialIcon>;
-const NotificationsIcon = () => <MaterialIcon>notifications</MaterialIcon>;
-const SearchIcon = () => <MaterialIcon>search</MaterialIcon>;
-const SettingsIcon = () => <MaterialIcon>settings</MaterialIcon>;
-const HelpIcon = () => <MaterialIcon>help</MaterialIcon>;
-const UnfoldMoreIcon = () => <MaterialIcon>unfold_more</MaterialIcon>;
-const AddIcon = () => <MaterialIcon>add</MaterialIcon>;
-const HistoryIcon = () => <MaterialIcon>history</MaterialIcon>;
-const AddCircleIcon = () => <MaterialIcon>add_circle</MaterialIcon>;
-const MoodIcon = () => <MaterialIcon>mood</MaterialIcon>;
-const AlternateEmailIcon = () => <MaterialIcon>alternate_email</MaterialIcon>;
-const SendIcon = () => <MaterialIcon>send</MaterialIcon>;
-const LinkIcon = () => <MaterialIcon>link</MaterialIcon>;
-const CloseIcon = () => <MaterialIcon>close</MaterialIcon>;
-const DescriptionIcon = () => <MaterialIcon>description</MaterialIcon>;
-const ImageIcon = () => <MaterialIcon>image</MaterialIcon>;
-const PushPinIcon = () => <MaterialIcon>push_pin</MaterialIcon>;
-const AutoAwesomeIcon = () => <MaterialIcon style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</MaterialIcon>;
-const ReplyIcon = () => <MaterialIcon>reply</MaterialIcon>;
-
-export default function HomeScreen() {
-  const { user, token } = useAuth();
+export default function HomeScreen({
+  user,
+  workspaces,
+  documents,
+  conversations,
+  activities,
+  onOpenWorkspace,
+  onOpenDocs,
+  onOpenChat,
+  onCreateDocument,
+  onCreateWorkspace,
+  onOpenConversation,
+  onOpenDocument,
+}) {
   const { apiFetch } = useApi();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('mentions');
-  const [message, setMessage] = useState('');
+  const [tasks, setTasks] = useState([]);
+  const [dailyPrompt, setDailyPrompt] = useState('');
+  const [dailySummary, setDailySummary] = useState('');
+  const [summarizing, setSummarizing] = useState(false);
+  const [meetingNotesInput, setMeetingNotesInput] = useState('');
+  const [capturingMeeting, setCapturingMeeting] = useState(false);
+  const [meetingCaptureError, setMeetingCaptureError] = useState('');
+  const [meetingTimeline, setMeetingTimeline] = useState([]);
+  const [conversionStatusByKey, setConversionStatusByKey] = useState({});
+  const meetingInputRef = useRef(null);
 
-  const channels = [
-    { id: 1, name: 'engineering-prod', active: false },
-    { id: 2, name: 'design-system', active: true },
-    { id: 3, name: 'q3-roadmap', active: false },
-  ];
+  const firstWorkspaceId = workspaces?.[0]?._id || null;
 
-  const directMessages = [
-    { id: 1, name: 'Sarah Chen', online: true, avatar: 'SC', hasUnread: false },
-    { id: 2, name: 'Marcus Wright', online: true, avatar: 'MW', hasUnread: true, unreadCount: 2 },
-    { id: 3, name: 'Jordan Smith', online: false, avatar: 'JS', hasUnread: false, offline: true },
-  ];
+  useEffect(() => {
+    if (!firstWorkspaceId) {
+      setTasks([]);
+      return;
+    }
+    let cancelled = false;
+    apiFetch(`/tasks?workspaceId=${firstWorkspaceId}`)
+      .then((list) => {
+        if (!cancelled) setTasks(list || []);
+      })
+      .catch(() => {
+        if (!cancelled) setTasks([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [firstWorkspaceId, apiFetch]);
 
-  const participants = [
-    { name: 'You (Alex)', avatar: 'A' },
-    { name: 'Sarah Chen', avatar: 'SC' },
-    { name: 'Marcus Wright', avatar: 'MW' },
-  ];
+  const openTasks = useMemo(() => tasks.filter((task) => task.status !== 'done'), [tasks]);
+  const hasDailySummary = dailySummary.trim().length > 0 && !dailySummary.startsWith('No activity') && !dailySummary.startsWith('Unable');
 
-  const sharedFiles = [
-    { name: 'monolith-spec-v2.pdf', size: '2.4 MB', date: 'Sep 12', type: 'doc' },
-    { name: 'typography-scale.png', size: '1.1 MB', date: 'Yesterday', type: 'image' },
-  ];
+  useEffect(() => {
+    if (!firstWorkspaceId) {
+      setMeetingTimeline([]);
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(`onechat:meetingTimeline:${firstWorkspaceId}`);
+      if (!raw) {
+        setMeetingTimeline([]);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      setMeetingTimeline(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      setMeetingTimeline([]);
+    }
+  }, [firstWorkspaceId]);
 
-  const handleSendMessage = (e) => {
-    e.preventDefault();
-    if (!message.trim()) return;
-    console.log('Sending message:', message);
-    setMessage('');
-  };
+  useEffect(() => {
+    if (!firstWorkspaceId) return;
+    try {
+      window.localStorage.setItem(`onechat:meetingTimeline:${firstWorkspaceId}`, JSON.stringify(meetingTimeline.slice(0, 20)));
+    } catch {
+      // Ignore persistence errors in private browsing or restricted contexts.
+    }
+  }, [firstWorkspaceId, meetingTimeline]);
+
+  useEffect(() => {
+    function onFocusMeetingCapture() {
+      meetingInputRef.current?.focus();
+    }
+    window.addEventListener('home:focusMeetingCapture', onFocusMeetingCapture);
+    return () => window.removeEventListener('home:focusMeetingCapture', onFocusMeetingCapture);
+  }, []);
+
+  async function summarizeDay() {
+    const baseText = activities
+      .slice(0, 25)
+      .map((item) => `- ${item.message}`)
+      .join('\n');
+    if (!baseText.trim()) {
+      setDailySummary('No activity yet to summarize.');
+      return;
+    }
+    setSummarizing(true);
+    try {
+      const prompt = `${dailyPrompt || 'Summarize my day and highlight blockers and next actions.'}\n\n${baseText}`;
+      const result = await apiFetch('/ai/assistant', {
+        method: 'POST',
+        body: JSON.stringify({ prompt, contextType: 'activity' }),
+      });
+      setDailySummary(result?.text || 'No summary generated.');
+    } catch {
+      setDailySummary('Unable to generate summary right now.');
+    } finally {
+      setSummarizing(false);
+    }
+  }
+
+  async function convertTextToTasks({ text, sourceType, sourceId, statusKey }) {
+    if (!text.trim()) return;
+    if (!firstWorkspaceId) {
+      setConversionStatusByKey((prev) => ({ ...prev, [statusKey]: 'Create or open a workspace first.' }));
+      return;
+    }
+
+    setConversionStatusByKey((prev) => ({ ...prev, [statusKey]: 'Creating tasks...' }));
+    try {
+      const result = await apiFetch('/ai/extract-actions', {
+        method: 'POST',
+        body: JSON.stringify({
+          workspaceId: firstWorkspaceId,
+          text,
+          createTasks: true,
+          sourceType,
+          sourceId,
+        }),
+      });
+      const createdTasks = result?.createdTasks || [];
+      setTasks((prev) => [...createdTasks, ...prev]);
+      setConversionStatusByKey((prev) => ({
+        ...prev,
+        [statusKey]: createdTasks.length > 0
+          ? `Created ${createdTasks.length} task${createdTasks.length > 1 ? 's' : ''}.`
+          : 'No actionable tasks found.',
+      }));
+    } catch {
+      setConversionStatusByKey((prev) => ({ ...prev, [statusKey]: 'Task conversion failed. Try again.' }));
+    }
+  }
+
+  async function captureMeetingNotes() {
+    if (!meetingNotesInput.trim()) {
+      setMeetingCaptureError('Add meeting notes first.');
+      return;
+    }
+    setMeetingCaptureError('');
+    setCapturingMeeting(true);
+    try {
+      const prompt = [
+        'Convert these raw meeting notes into a concise executive summary.',
+        'Return plain text in this format:',
+        'Summary:',
+        '- ...',
+        'Decisions:',
+        '- ...',
+        'Next steps:',
+        '- ...',
+        '',
+        meetingNotesInput.trim(),
+      ].join('\n');
+      const result = await apiFetch('/ai/assistant', {
+        method: 'POST',
+        body: JSON.stringify({ prompt, contextType: 'meeting_notes' }),
+      });
+
+      const nextBlock = {
+        id: `meeting-${Date.now()}`,
+        createdAt: new Date().toISOString(),
+        notes: meetingNotesInput.trim(),
+        summary: (result?.text || 'No summary generated.').trim(),
+      };
+      setMeetingTimeline((prev) => [nextBlock, ...prev].slice(0, 20));
+      setMeetingNotesInput('');
+    } catch {
+      setMeetingCaptureError('Unable to summarize meeting notes right now.');
+    } finally {
+      setCapturingMeeting(false);
+    }
+  }
 
   return (
-    <div className="flex h-screen overflow-hidden homescreen-container">
-      {/* Sidebar */}
-      <aside className="homescreen-sidebar">
-        {/* Workspace Switcher */}
-        <div className="homescreen-sidebar-header">
-          <div className="flex items-center gap-3">
-            <div className="homescreen-workspace-avatar">O</div>
-            <div>
-              <h2 className="homescreen-workspace-title">OneChat</h2>
-              <p className="homescreen-workspace-subtitle">Production Workspace</p>
-            </div>
-          </div>
-          <UnfoldMoreIcon className="homescreen-unfold-icon" />
-        </div>
-
-        {/* Search */}
-        <div className="homescreen-search">
-          <SearchIcon className="homescreen-search-icon" />
-          <input
-            type="text"
-            placeholder="Search"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="homescreen-search-input"
-          />
-        </div>
-
-        {/* Main Navigation */}
-        <nav className="homescreen-nav">
-          <div className="homescreen-nav-label">Workspace</div>
-          
-          <div className="homescreen-nav-item active">
-            <GridViewIcon className="homescreen-nav-icon" />
-            <span>Workspaces</span>
-          </div>
-          
-          <div className="homescreen-nav-item">
-            <NotificationsIcon className="homescreen-nav-icon" />
-            <span className="flex-1">Activity</span>
-            <span className="homescreen-badge">4</span>
-          </div>
-
-          {/* Channels */}
-          <div className="homescreen-section">
-            <div className="homescreen-section-header">
-              <span>Channels</span>
-              <AddIcon className="homescreen-section-add" />
-            </div>
-            <div className="homescreen-section-items">
-              {channels.map((channel) => (
-                <div
-                  key={channel.id}
-                  className={`homescreen-channel-item ${channel.active ? 'active' : ''}`}
-                >
-                  <TagIcon className="homescreen-nav-icon" />
-                  <span>{channel.name}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Direct Messages */}
-          <div className="homescreen-section">
-            <div className="homescreen-section-header">
-              <span>Direct Messages</span>
-              <AddIcon className="homescreen-section-add" />
-            </div>
-            <div className="homescreen-section-items">
-              {directMessages.map((dm) => (
-                <div
-                  key={dm.id}
-                  className={`homescreen-dm-item ${dm.offline ? 'offline' : ''}`}
-                >
-                  <div className="homescreen-dm-avatar-wrapper">
-                    <div className={`homescreen-dm-avatar ${dm.hasUnread ? 'has-unread' : ''}`}>
-                      {dm.avatar}
-                    </div>
-                    <div className={`homescreen-dm-status ${dm.online ? 'online' : 'offline'}`} />
-                  </div>
-                  <span className="flex-1">{dm.name}</span>
-                  {dm.hasUnread && (
-                    <span className="homescreen-unread-badge">{dm.unreadCount}</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </nav>
-
-        {/* Footer */}
-        <div className="homescreen-footer">
-          <div className="homescreen-footer-item">
-            <SettingsIcon className="homescreen-nav-icon" />
-            <span>Settings</span>
-          </div>
-          <div className="homescreen-footer-item">
-            <HelpIcon className="homescreen-nav-icon" />
-            <span>Help</span>
-          </div>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <div className="homescreen-main-wrapper">
-        {/* Top Navigation */}
-        <header className="homescreen-header">
-          <div className="homescreen-header-left">
-            <div className="homescreen-channel-info">
-              <TagIcon className="homescreen-channel-icon" />
-              <h1 className="homescreen-channel-name">design-system</h1>
-            </div>
-            <nav className="homescreen-header-tabs">
-              <button
-                className={`homescreen-tab ${activeTab === 'threads' ? '' : ''}`}
-                onClick={() => setActiveTab('threads')}
-              >
-                Threads
-              </button>
-              <button
-                className={`homescreen-tab active`}
-                onClick={() => setActiveTab('mentions')}
-              >
-                Mentions
-              </button>
-              <button
-                className={`homescreen-tab ${activeTab === 'drafts' ? '' : ''}`}
-                onClick={() => setActiveTab('drafts')}
-              >
-                Drafts
-              </button>
-            </nav>
-          </div>
-          <div className="homescreen-header-right">
-            <button className="homescreen-share-btn">Share</button>
-            <div className="homescreen-header-icons">
-              <HistoryIcon className="homescreen-header-icon" />
-              <HelpIcon className="homescreen-header-icon" />
-            </div>
-            <img
-              alt="User Profile"
-              className="homescreen-user-avatar"
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuCDogvyYf28T6_SIRK2jjN-z_qWmlt3pSAH_SqPksDplrbV-X3Hsv5tpP3A5dYueooPsHKzu_6dwaNjH6dQ3ep0Wv-CNXpmngzedMMiu8VroN8aS0lVSRr0PA3d7FDDc20Iy5lbhvoalMcN09aLxj0jBH6UQbi4GpSpoOPtBDh5UNJEcSFqA-BQsMKTqqYvxpa4scOj4e2g0-G9BuezNpT-oQCLUQq7ta1al2_L4f8A_7MAYk0xysIAR5HkL37bPGRcYeJFc6ds8HM"
-            />
-          </div>
-        </header>
-
-        {/* Content Area */}
-        <main className="homescreen-content">
-          {/* Chat Area */}
-          <div className="homescreen-chat-area">
-            {/* Messages */}
-            <div className="homescreen-messages">
-              {/* Message from Sarah */}
-              <div className="homescreen-message">
-                <img
-                  className="homescreen-message-avatar"
-                  alt="Sarah Chen"
-                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuA-unAf6sq3s5bE3tBjulltR_fh6dj1cBLCgDEnV1ZtkNBA9H-C9_ZuEIh2EbFi3Xmeoj-LF3s2rhHTsbyuKYaxUnUNFUxM3Vv17--XiZcMpDXpYF16JVuLRKAwOwxxWLOHEUdytmsbnGyTr3w-IY9y3DE-6nQslEw2FO7eW6g-GWAtH1sAL5mlvhRS6zn5HUiszFTZd441i5cGuJj2zM67Q_t54PF1VnTaw1vdjteIc0h6w5tgl8NFHccGHVXSuSb5lGQEF7qwijs"
-                />
-                <div className="homescreen-message-content">
-                  <div className="homescreen-message-header">
-                    <span className="homescreen-message-sender">Sarah Chen</span>
-                    <span className="homescreen-message-time">10:42 AM</span>
-                  </div>
-                  <div className="homescreen-message-text">
-                    Hey team, I've finished the initial draft for the new <span className="homescreen-mention">@design-system</span> components. Specifically looking for feedback on the Monolith strategy we discussed.
-                  </div>
-                  <div className="homescreen-message-reactions">
-                    <button className="homescreen-reaction">
-                      <span>🚀</span> <span className="homescreen-reaction-count">3</span>
-                    </button>
-                    <button className="homescreen-reaction">
-                      <span>💯</span> <span className="homescreen-reaction-count">1</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* AI Assistant */}
-              <div className="homescreen-ai-message">
-                <div className="homescreen-ai-avatar">
-                  <AutoAwesomeIcon className="homescreen-ai-icon" />
-                </div>
-                <div className="homescreen-ai-content">
-                  <div className="homescreen-ai-header">
-                    <span className="homescreen-ai-title">AI Assistant</span>
-                    <span className="homescreen-ai-badge">BETA</span>
-                  </div>
-                  <p className="homescreen-ai-text">
-                    I've analyzed the design tokens. The new elevation scale looks more consistent with the "Quiet Intelligence" philosophy. Would you like a summary of the pending changes?
-                  </p>
-                  <div className="homescreen-ai-actions">
-                    <button className="homescreen-ai-action-btn">Summarize Thread</button>
-                    <button className="homescreen-ai-action-btn">Extract Tasks</button>
-                    <button className="homescreen-ai-action-btn">Generate Insights</button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Message from Marcus */}
-              <div className="homescreen-message">
-                <img
-                  className="homescreen-message-avatar"
-                  alt="Marcus Wright"
-                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuCX30MAT1fC3HeeuZgfcpnl3frkILKXy4rOYdp7AofuwlpOiFC-EOooNDKdgLL32JLgfrtbtpdEyoCmAosMrTKRn5ACx0m5ccGf69yq0YY0NAyTTVLzqRA2YdemX_XDNOoTSPFSMnWtuPY6Wasvq841iCIu8Mgh232B0TyDoAQnlw0_jTotMKilznM5pqduDJN_5K7Jvw9tmUuFkHtqNk5Y5j7O-2iVJHeHxd0FEbB2v0aEtD602vZoBSFchszOY2cejf_1UeIt31o"
-                />
-                <div className="homescreen-message-content">
-                  <div className="homescreen-message-header">
-                    <span className="homescreen-message-sender">Marcus Wright</span>
-                    <span className="homescreen-message-time">11:15 AM</span>
-                  </div>
-                  <div className="homescreen-message-text">
-                    Looks sharp. The surface-container nesting is much cleaner than the old divider lines. I'll start implementing the Tailwind config update this afternoon.
-                  </div>
-                  <div className="homescreen-reply-thread">
-                    <ReplyIcon className="homescreen-reply-icon" />
-                    <span className="homescreen-reply-text">2 replies</span>
-                    <span className="homescreen-reply-time">Last reply 5 mins ago</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Typing Indicator */}
-              <div className="homescreen-typing">
-                <div className="homescreen-typing-dots">
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </div>
-                <span>Sarah Chen is typing...</span>
-              </div>
-            </div>
-
-            {/* Message Input */}
-            <div className="homescreen-input-area">
-              <form className="homescreen-input-form" onSubmit={handleSendMessage}>
-                <button type="button" className="homescreen-input-action">
-                  <AddCircleIcon />
-                </button>
-                <textarea
-                  className="homescreen-input"
-                  placeholder="Message #design-system"
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  rows={1}
-                />
-                <div className="homescreen-input-actions">
-                  <button type="button" className="homescreen-input-action">
-                    <MoodIcon />
-                  </button>
-                  <button type="button" className="homescreen-input-action">
-                    <AlternateEmailIcon />
-                  </button>
-                  <button type="submit" className="homescreen-send-btn">
-                    <SendIcon />
-                  </button>
-                </div>
-              </form>
-              <div className="homescreen-input-hints">
-                <span><strong>B</strong> Bold</span>
-                <span><em>I</em> Italic</span>
-                <span><LinkIcon className="homescreen-hint-icon" /> Link</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Panel */}
-          <aside className="homescreen-right-panel">
-            <div className="homescreen-panel-header">
-              <h3 className="homescreen-panel-title">Details</h3>
-              <CloseIcon className="homescreen-panel-close" />
-            </div>
-            <div className="homescreen-panel-content">
-              {/* About */}
-              <div className="homescreen-panel-section">
-                <h4 className="homescreen-panel-label">About</h4>
-                <p className="homescreen-panel-text">
-                  Central hub for the OneChat design language, documentation, and component lifecycle management.
-                </p>
-              </div>
-
-              {/* Participants */}
-              <div className="homescreen-panel-section">
-                <div className="homescreen-participants-header">
-                  <h4 className="homescreen-panel-label">Participants</h4>
-                  <span className="homescreen-participants-count">12</span>
-                </div>
-                <div className="homescreen-participants-list">
-                  {participants.map((p, idx) => (
-                    <div key={idx} className="homescreen-participant">
-                      <div className="homescreen-participant-avatar">{p.avatar}</div>
-                      <span>{p.name}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Shared Files */}
-              <div className="homescreen-panel-section">
-                <h4 className="homescreen-panel-label">Shared Files</h4>
-                <div className="homescreen-files-list">
-                  {sharedFiles.map((file, idx) => (
-                    <div key={idx} className="homescreen-file-item">
-                      <div className="homescreen-file-icon">
-                        {file.type === 'doc' ? <DescriptionIcon /> : <ImageIcon />}
-                      </div>
-                      <div className="homescreen-file-info">
-                        <p className="homescreen-file-name">{file.name}</p>
-                        <p className="homescreen-file-meta">{file.size} • {file.date}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Pinned */}
-              <div className="homescreen-panel-section">
-                <h4 className="homescreen-panel-label">Pinned</h4>
-                <div className="homescreen-pinned-message">
-                  <PushPinIcon className="homescreen-pinned-icon" />
-                  <p className="homescreen-pinned-text">
-                    "Remember to use the 8px rhythmic grid for all new mobile layouts..."
-                  </p>
-                  <p className="homescreen-pinned-author">— Sarah Chen</p>
-                </div>
-              </div>
-            </div>
-            <div className="homescreen-panel-footer">
-              <button className="homescreen-history-btn">View All History</button>
-            </div>
-          </aside>
-        </main>
+    <section className="relative flex min-h-full flex-col px-12 pb-12">
+      <div className="mb-12 mt-4">
+        <h2 className="mb-3 font-headline text-5xl font-semibold tracking-tight italic text-[#1a1a1a]">Welcome back, {user?.name || 'Curator'}.</h2>
+        <p className="max-w-lg text-base font-light tracking-wide text-[#64748b]/70">Organize your thoughts and connections in one seamless, intentional interface.</p>
       </div>
-    </div>
+
+      <div className="mb-8 flex flex-wrap gap-2">
+        <button className="btn btn-primary" onClick={onCreateDocument}>New Doc</button>
+        <button className="btn btn-secondary" onClick={onCreateWorkspace}>New Workspace</button>
+        <button className="btn btn-secondary" onClick={onOpenWorkspace}>Open Workspace</button>
+        <button className="btn btn-secondary" onClick={onOpenChat}>Open Chat</button>
+        <button className="btn btn-secondary" onClick={onOpenDocs}>Open Docs</button>
+      </div>
+
+      <div className="grid flex-1 grid-cols-12 gap-10">
+        <div className="col-span-12 rounded-2xl border border-slate-100/50 bg-white p-8 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.05)] lg:col-span-8">
+          <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[#64748b]/70">Daily AI Brief</div>
+          <textarea
+            className="w-full rounded-xl border border-slate-100 bg-white p-3 text-sm outline-none focus:border-slate-200 focus:ring-4 focus:ring-black/5"
+            value={dailyPrompt}
+            onChange={(e) => setDailyPrompt(e.target.value)}
+            placeholder="Optional focus: highlight priorities, blockers, and next actions..."
+            rows={3}
+          />
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button className="btn btn-primary" onClick={summarizeDay} disabled={summarizing}>
+              {summarizing ? 'Generating...' : 'Generate Brief'}
+            </button>
+            <button
+              className="btn btn-secondary"
+              disabled={!hasDailySummary}
+              onClick={() => convertTextToTasks({
+                text: dailySummary,
+                sourceType: 'daily_summary',
+                sourceId: `daily-${new Date().toISOString().slice(0, 10)}`,
+                statusKey: 'daily-summary',
+              })}
+            >
+              Convert Summary to Tasks
+            </button>
+          </div>
+          {conversionStatusByKey['daily-summary'] && <p className="mt-2 text-xs text-[#64748b]">{conversionStatusByKey['daily-summary']}</p>}
+          {dailySummary && (
+            <pre className="mt-3 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-sm text-[#1a1a1a]">{dailySummary}</pre>
+          )}
+        </div>
+
+        <div className="col-span-12 flex flex-col gap-10 lg:col-span-4">
+          <div className="flex flex-1 flex-col rounded-2xl border border-slate-100 bg-white p-8 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.03)]">
+            <div className="mb-8 flex items-center justify-between">
+              <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#64748b]/60">Activity Pulse</h4>
+              <span className="h-1.5 w-1.5 rounded-full bg-[#1a1a1a]" />
+            </div>
+            <div className="space-y-3 max-h-[220px] overflow-auto">
+              {activities.slice(0, 6).map((item) => (
+                <div key={item._id} className="rounded-lg bg-slate-50 p-3">
+                  <div className="text-sm">{item.message}</div>
+                  <div className="mt-1 text-xs text-[#64748b]">{new Date(item.createdAt).toLocaleString()}</div>
+                </div>
+              ))}
+              {activities.length === 0 && <div className="text-sm text-[#64748b]">No activity yet.</div>}
+            </div>
+            <div className="mt-auto border-t border-slate-50 pt-8">
+              <p className="font-headline text-[12px] italic text-[#64748b]/40">"Simplicity is the ultimate sophistication."</p>
+              <p className="mt-2 text-[10px] uppercase tracking-widest text-[#64748b]/30">— Leonardo da Vinci</p>
+            </div>
+          </div>
+
+          <div className="group flex cursor-pointer items-center gap-5 rounded-2xl border border-slate-100 bg-white p-6 transition-all duration-500 hover:shadow-[0_10px_40px_-10px_rgba(0,0,0,0.05)]">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-50 text-[#64748b] transition-all group-hover:text-[#1a1a1a]">
+              <span className="material-symbols-outlined">bookmark</span>
+            </div>
+            <div className="flex-1">
+              <p className="mb-1 text-[9px] font-bold uppercase tracking-[0.15em] text-[#64748b]/40">Pinned Resource</p>
+              <p className="text-sm font-medium text-[#1a1a1a] transition-transform group-hover:translate-x-1">Project Curations 2024</p>
+            </div>
+            <span className="material-symbols-outlined text-slate-300 transition-colors group-hover:text-[#1a1a1a]">north_east</span>
+          </div>
+        </div>
+
+        <div className="col-span-12 rounded-2xl border border-slate-100 bg-white p-6 lg:col-span-7">
+          <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[#64748b]/70">Meeting Note Capture</div>
+          <textarea
+            ref={meetingInputRef}
+            className="w-full rounded-xl border border-slate-100 bg-white p-3 text-sm outline-none focus:border-slate-200 focus:ring-4 focus:ring-black/5"
+            value={meetingNotesInput}
+            onChange={(e) => setMeetingNotesInput(e.target.value)}
+            placeholder="Paste quick meeting notes, decisions, owners, and deadlines..."
+            rows={5}
+          />
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button className="btn btn-primary" disabled={capturingMeeting} onClick={captureMeetingNotes}>
+              {capturingMeeting ? 'Summarizing...' : 'Capture + Auto-Summarize'}
+            </button>
+            <span className="text-xs text-[#64748b]">Cmd/Ctrl+K, then run "Focus Meeting Capture"</span>
+          </div>
+          {meetingCaptureError && <p className="mt-2 text-xs text-red-500">{meetingCaptureError}</p>}
+        </div>
+
+        <div className="col-span-12 rounded-2xl border border-slate-100 bg-white p-6 lg:col-span-5">
+          <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[#64748b]/70">Open Tasks</div>
+          <div className="space-y-2 max-h-[260px] overflow-auto">
+            {openTasks.slice(0, 10).map((task) => (
+              <div key={task._id} className="rounded-lg border border-slate-100 p-3">
+                <div className="text-sm font-semibold">{task.title}</div>
+                <div className="text-xs text-[#64748b]">{task.status}</div>
+              </div>
+            ))}
+            {openTasks.length === 0 && <div className="text-sm text-[#64748b]">No open tasks.</div>}
+          </div>
+        </div>
+
+        <div className="col-span-12 rounded-2xl border border-slate-100 bg-white p-6">
+          <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[#64748b]/70">Meeting Timeline Blocks</div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 max-h-[430px] overflow-auto pr-1">
+            {meetingTimeline.map((block) => (
+              <div key={block.id} className="rounded-xl border border-slate-100 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-semibold text-[#64748b]">Meeting Snapshot</span>
+                  <span className="text-xs text-[#64748b]">{new Date(block.createdAt).toLocaleString()}</span>
+                </div>
+                <pre className="mt-2 whitespace-pre-wrap text-sm">{block.summary}</pre>
+                <button
+                  className="btn btn-secondary mt-3"
+                  onClick={() => convertTextToTasks({
+                    text: block.summary,
+                    sourceType: 'meeting_summary',
+                    sourceId: block.id,
+                    statusKey: block.id,
+                  })}
+                >
+                  Convert Summary to Tasks
+                </button>
+                {conversionStatusByKey[block.id] && (
+                  <p className="mt-2 text-xs text-[#64748b]">{conversionStatusByKey[block.id]}</p>
+                )}
+              </div>
+            ))}
+            {meetingTimeline.length === 0 && (
+              <div className="text-sm text-[#64748b]">No meeting timeline blocks yet.</div>
+            )}
+          </div>
+        </div>
+
+        <div className="col-span-12 rounded-2xl border border-slate-100 bg-white p-6 lg:col-span-6">
+          <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[#64748b]/70">Recent Documents</div>
+          <div className="space-y-2">
+            {documents.slice(0, 6).map((doc) => (
+              <button key={doc._id} className="workspace-section-item w-full text-left" onClick={() => onOpenDocument(doc._id)}>
+                <span>{doc.title || 'Untitled Document'}</span>
+              </button>
+            ))}
+            {documents.length === 0 && <div className="text-sm text-[#64748b]">No documents yet.</div>}
+          </div>
+        </div>
+
+        <div className="col-span-12 rounded-2xl border border-slate-100 bg-white p-6 lg:col-span-6">
+          <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[#64748b]/70">Recent Conversations</div>
+          <div className="space-y-2">
+            {conversations.slice(0, 6).map((conv) => (
+              <button key={conv._id} className="workspace-section-item w-full text-left" onClick={() => onOpenConversation(conv._id)}>
+                <span>{conv.name || 'Conversation'}</span>
+              </button>
+            ))}
+            {conversations.length === 0 && <div className="text-sm text-[#64748b]">No conversations yet.</div>}
+          </div>
+        </div>
+      </div>
+
+      <div className="pointer-events-none fixed bottom-8 right-8 hidden md:block">
+        <div className="group flex items-center gap-4 rounded-2xl border border-slate-200/50 bg-white/80 px-5 py-3 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.05)] backdrop-blur-xl transition-all hover:bg-white">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]/70">Command</span>
+          <div className="flex gap-1.5">
+            <kbd className="rounded-lg border border-slate-100 bg-slate-50 px-2 py-1 font-mono text-[10px] font-bold">Cmd</kbd>
+            <kbd className="rounded-lg border border-slate-100 bg-slate-50 px-2 py-1 font-mono text-[10px] font-bold">K</kbd>
+          </div>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]/70">to search</span>
+        </div>
+      </div>
+    </section>
   );
 }

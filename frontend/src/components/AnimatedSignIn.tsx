@@ -4,9 +4,9 @@ import React, { useState, useEffect } from "react";
 import {
   Eye,
   EyeOff,
-  Github,
-  Twitter,
-  Linkedin,
+  GitFork,
+  AtSign,
+  Globe,
   Sun,
   Moon,
 } from "lucide-react";
@@ -278,13 +278,13 @@ const AnimatedSignIn = () => {
 
           <div className="social-login">
             <button className="social-button github" type="button">
-              <Github size={18} />
+              <GitFork size={18} />
             </button>
             <button className="social-button twitter" type="button">
-              <Twitter size={18} />
+              <AtSign size={18} />
             </button>
             <button className="social-button linkedin" type="button">
-              <Linkedin size={18} />
+              <Globe size={18} />
             </button>
           </div>
 
@@ -309,3 +309,5 @@ const AnimatedSignIn = () => {
 };
 
 export default AnimatedSignIn;
+
+

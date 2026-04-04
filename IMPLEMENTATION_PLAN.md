@@ -215,4 +215,26 @@ Success criteria:
 - Replaced strict LWW doc updates with revision-aware merge flow and sync/ack events:
   - server events: `doc:sync`, `doc:ack`, `doc:sync-request`
   - client sends `baseRevision` and `baseContent` to reduce overwrite conflicts
+- Implemented workspace UI flows for:
+  - task CRUD/status updates
+  - AI task extraction from page content
+  - member add/update/remove with role assignment
+- Updated `README.md` with current environment setup, APIs, and realtime events
+- Removed remaining runtime mock/static data usage:
+  - deleted unused `frontend/src/pages/HomeScreen.jsx`
+  - replaced hardcoded chat contact info with real participant metadata
+- Added backend activity feed:
+  - model: `backend/src/models/Activity.js`
+  - routes: `GET /activity`
+  - service: `backend/src/activity/activity.service.js`
+  - event logging integrated in workspace/page/task/chat/document/AI flows
+- Wired shell-level global search and command palette behavior (`Ctrl/Cmd+K`) to live `/search` API
+- Wired right context panel to live `/activity` feed instead of local placeholders
+- Implemented signup-first onboarding flow (`Login` now opens in register mode)
+- Added Granola-style authenticated Home screen (`frontend/src/pages/HomeScreen.jsx`) with:
+  - AI daily brief generation from activity
+  - quick actions (create doc/workspace, jump to chat/docs/workspace)
+  - live tasks, docs, conversations, and activity panels
+- Set authenticated default landing view to Home in `frontend/src/App.jsx`
 
+ 

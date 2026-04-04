@@ -2,6 +2,7 @@ const Message = require('../models/Message');
 const Conversation = require('../models/Conversation');
 const { getPub } = require('../config/redis');
 const { createNotification } = require('../notifications/notification.service');
+const { logActivity } = require('../activity/activity.service');
 
 function normalizeId(value) {
   return value?.toString?.() || String(value);
@@ -93,6 +94,12 @@ function registerChatHandlers(io, socket) {
 
       // Broadcast to room (all participants in the conversation)
       io.to(`chat:${conversationId}`).emit('message:new', populated);
+      await logActivity(io, {
+        actorId: socket.user.id,
+        type: 'message_sent',
+        message: `Sent message in ${conv.name || 'conversation'}`,
+        meta: { conversationId, messageId: msg._id.toString() },
+      });
 
       // Publish to Redis for horizontal scaling
       try {

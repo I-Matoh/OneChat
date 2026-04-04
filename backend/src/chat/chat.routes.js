@@ -3,6 +3,7 @@ const { authMiddleware } = require('../middleware/auth');
 const Message = require('../models/Message');
 const Conversation = require('../models/Conversation');
 const { getGlobalIo } = require('../websocket/socketServer');
+const { logActivity } = require('../activity/activity.service');
 
 const router = Router();
 
@@ -36,6 +37,13 @@ router.post('/conversations', authMiddleware, async (req, res) => {
         });
       }
     }
+
+    await logActivity(io, {
+      actorId: req.user.id,
+      type: 'conversation_created',
+      message: `Created conversation "${name || 'Conversation'}"`,
+      meta: { conversationId: conv._id.toString() },
+    });
     
     res.status(201).json(populated);
   } catch (err) {

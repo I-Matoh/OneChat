@@ -10,6 +10,8 @@ const {
 const Workspace = require('../models/Workspace');
 const Page = require('../models/Page');
 const User = require('../models/User');
+const { getGlobalIo } = require('../websocket/socketServer');
+const { logActivity } = require('../activity/activity.service');
 const {
   normalizeId,
   hasRole,
@@ -39,6 +41,14 @@ router.post('/', authMiddleware, validateWorkspaceCreate, async (req, res) => {
       name,
       ownerId: req.user.id,
       members: [{ userId: req.user.id, role: 'owner' }],
+    });
+
+    await logActivity(getGlobalIo(), {
+      actorId: req.user.id,
+      workspaceId: workspace._id,
+      type: 'workspace_created',
+      message: `Created workspace "${workspace.name}"`,
+      meta: { workspaceId: workspace._id.toString() },
     });
 
     res.status(201).json(workspace);
@@ -89,6 +99,14 @@ router.post('/:workspaceId/pages', authMiddleware, validatePageCreate, async (re
       updatedBy: req.user.id,
     });
 
+    await logActivity(getGlobalIo(), {
+      actorId: req.user.id,
+      workspaceId: workspace._id,
+      type: 'page_created',
+      message: `Created page "${page.title}"`,
+      meta: { pageId: page._id.toString() },
+    });
+
     res.status(201).json(page);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -114,6 +132,13 @@ router.patch('/pages/:pageId', authMiddleware, validatePagePatch, async (req, re
     if (req.body?.parentId !== undefined) updates.parentId = req.body.parentId || null;
 
     const updated = await Page.findByIdAndUpdate(page._id, { $set: updates }, { new: true });
+    await logActivity(getGlobalIo(), {
+      actorId: req.user.id,
+      workspaceId: page.workspaceId,
+      type: 'page_updated',
+      message: `Updated page "${updated.title}"`,
+      meta: { pageId: updated._id.toString() },
+    });
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -136,6 +161,14 @@ router.delete('/pages/:pageId', authMiddleware, async (req, res) => {
         { _id: page._id },
         { parentId: page._id },
       ],
+    });
+
+    await logActivity(getGlobalIo(), {
+      actorId: req.user.id,
+      workspaceId: page.workspaceId,
+      type: 'page_deleted',
+      message: `Deleted page`,
+      meta: { pageId: page._id.toString() },
     });
 
     res.json({ success: true, pageId: normalizeId(page._id) });
@@ -194,6 +227,13 @@ router.post('/:workspaceId/members', authMiddleware, validateWorkspaceMemberCrea
     }
 
     await workspace.save();
+    await logActivity(getGlobalIo(), {
+      actorId: req.user.id,
+      workspaceId: workspace._id,
+      type: 'member_added',
+      message: `Added member to workspace`,
+      meta: { memberUserId: userId, role },
+    });
     return res.status(201).json({ success: true });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -230,6 +270,13 @@ router.patch('/:workspaceId/members/:memberUserId', authMiddleware, validateWork
     }
 
     await workspace.save();
+    await logActivity(getGlobalIo(), {
+      actorId: req.user.id,
+      workspaceId: workspace._id,
+      type: 'member_role_updated',
+      message: `Updated member role`,
+      meta: { memberUserId, role: nextRole },
+    });
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -251,6 +298,13 @@ router.delete('/:workspaceId/members/:memberUserId', authMiddleware, async (req,
 
     workspace.members = (workspace.members || []).filter((item) => normalizeId(item.userId) !== normalizeId(memberUserId));
     await workspace.save();
+    await logActivity(getGlobalIo(), {
+      actorId: req.user.id,
+      workspaceId: workspace._id,
+      type: 'member_removed',
+      message: `Removed member from workspace`,
+      meta: { memberUserId },
+    });
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ error: err.message });
