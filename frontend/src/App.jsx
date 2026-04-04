@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Chat from './pages/Chat';
 import Editor from './pages/Editor';
 import Workspace from './pages/Workspace';
+import HomeScreen from './pages/HomeScreen';
 import NotificationBell from './components/NotificationBell';
 import NewConvModal from './components/NewConvModal';
 
@@ -95,7 +96,7 @@ function AppShell() {
   const { connected } = useSocket(token);
   const { apiFetch } = useApi();
 
-  const [view, setView] = useState('workspace');
+  const [view, setView] = useState('home');
   const [activeNav, setActiveNav] = useState('home');
   const [conversations, setConversations] = useState([]);
   const [activeConvId, setActiveConvId] = useState(null);
@@ -313,7 +314,9 @@ function AppShell() {
 
         <div className="layout-main-content">
           <div className="layout-content-panel">
-            {view === 'workspace' ? (
+            {view === 'home' ? (
+              <HomeScreen />
+            ) : view === 'workspace' ? (
               <Workspace />
             ) : view === 'chat' ? (
               <Chat
