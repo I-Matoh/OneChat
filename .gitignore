@@ -14,6 +14,9 @@ build/
 .agent
 .claude
 .kilo
+.cursor
+.gemini
+.aider
 
 
 # Logs
