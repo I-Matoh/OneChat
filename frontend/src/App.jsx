@@ -6,7 +6,6 @@ import Login from './pages/Login';
 import Chat from './pages/Chat';
 import Editor from './pages/Editor';
 import Workspace from './pages/Workspace';
-import HomeScreen from './pages/HomeScreen';
 import NotificationBell from './components/NotificationBell';
 import NewConvModal from './components/NewConvModal';
 
@@ -28,7 +27,6 @@ const PanelLeftIcon = () => (
   </svg>
 );
 
-// Icons as simple SVG components
 const HomeIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -49,13 +47,7 @@ const ChatIcon = () => (
 
 const DocIcon = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-  </svg>
-);
-
-const GridIcon = () => (
-  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 3h8l5 5v13a1 1 0 01-1 1H7a2 2 0 01-2-2V5a2 2 0 012-2zm8 1v5h5" />
   </svg>
 );
 
@@ -77,51 +69,43 @@ const SearchIcon = () => (
   </svg>
 );
 
-const FolderIcon = () => (
-  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-  </svg>
-);
-
-// Sample workspace data
-const sampleSpaces = [
-  { id: '1', name: 'My Notes', icon: '📝' },
-  { id: '2', name: 'Team Hub', icon: '👥' },
-  { id: '3', name: 'Projects', icon: '📁' },
-  { id: '4', name: 'Customer Calls', icon: '📞' },
-];
-
 function AppShell() {
   const { user, token, loading, logout } = useAuth();
   const { connected } = useSocket(token);
   const { apiFetch } = useApi();
 
-  const [view, setView] = useState('home');
-  const [activeNav, setActiveNav] = useState('home');
+  const [view, setView] = useState('workspace');
+  const [activeNav, setActiveNav] = useState('workspace');
   const [conversations, setConversations] = useState([]);
   const [activeConvId, setActiveConvId] = useState(null);
   const [documents, setDocuments] = useState([]);
   const [activeDocId, setActiveDocId] = useState(null);
   const [showNewConv, setShowNewConv] = useState(false);
-  const [showNewDoc, setShowNewDoc] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState([]);
+  const [workspaces, setWorkspaces] = useState([]);
 
   useEffect(() => {
     if (!token) return;
     apiFetch('/chat/conversations').then(setConversations).catch(() => {});
-  }, [token]);
+  }, [token, apiFetch]);
 
   useEffect(() => {
     if (!token) return;
     apiFetch('/docs').then(setDocuments).catch(() => {});
-  }, [token]);
+  }, [token, apiFetch]);
+
+  useEffect(() => {
+    if (!token) return;
+    apiFetch('/workspaces').then(setWorkspaces).catch(() => {});
+  }, [token, apiFetch]);
 
   useEffect(() => {
     if (!token || !connected) return;
     const socket = getSocket(token);
+
     const handleInit = (users) => setOnlineUsers(users);
     const handleUpdate = (data) => {
       setOnlineUsers((prev) => {
@@ -135,8 +119,10 @@ function AppShell() {
         return [...prev, data];
       });
     };
+
     socket.on('presence:init', handleInit);
     socket.on('presence:update', handleUpdate);
+
     return () => {
       socket.off('presence:init', handleInit);
       socket.off('presence:update', handleUpdate);
@@ -151,13 +137,15 @@ function AppShell() {
   }, []);
 
   useSocketEvent('conversation:updated', (data) => {
-    setConversations((prev) =>
-      prev.map((c) =>
-        c._id === data.conversationId
-          ? { ...c, lastMessage: data.lastMessage, updatedAt: data.updatedAt }
-          : c
-      ).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
-    );
+    setConversations((prev) => (
+      prev
+        .map((c) => (
+          c._id === data.conversationId
+            ? { ...c, lastMessage: data.lastMessage, updatedAt: data.updatedAt }
+            : c
+        ))
+        .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+    ));
   }, []);
 
   async function createDocument() {
@@ -168,10 +156,37 @@ function AppShell() {
     setDocuments((prev) => [doc, ...prev]);
     setActiveDocId(doc._id);
     setView('editor');
+    setActiveNav('docs');
   }
 
-  const toggleMobileSidebar = () => setMobileSidebarOpen(!mobileSidebarOpen);
-  const toggleRightPanel = () => setRightPanelOpen(!rightPanelOpen);
+  async function createWorkspace() {
+    const nextNumber = (workspaces?.length || 0) + 1;
+    const created = await apiFetch('/workspaces', {
+      method: 'POST',
+      body: JSON.stringify({ name: `Workspace ${nextNumber}` }),
+    });
+    setWorkspaces((prev) => [created, ...prev]);
+    setActiveNav('workspace');
+    setView('workspace');
+  }
+
+  function openWorkspace() {
+    setActiveNav('workspace');
+    setView('workspace');
+    setMobileSidebarOpen(false);
+  }
+
+  function openChat() {
+    setActiveNav('chat');
+    setView('chat');
+    setMobileSidebarOpen(false);
+  }
+
+  function openDocs() {
+    setActiveNav('docs');
+    setView('editor');
+    setMobileSidebarOpen(false);
+  }
 
   if (loading) {
     return (
@@ -188,7 +203,7 @@ function AppShell() {
     <div className="layout-container">
       <div className={`layout-sidebar ${mobileSidebarOpen ? 'open' : ''}`}>
         <div className="layout-sidebar-header">
-          <button className="mobile-menu-btn" onClick={toggleMobileSidebar}>
+          <button className="mobile-menu-btn" onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}>
             <MenuIcon />
           </button>
           <div className="app-search">
@@ -203,47 +218,44 @@ function AppShell() {
         </div>
 
         <nav className="app-nav">
-          <button
-            className={`app-nav-item ${activeNav === 'home' ? 'active' : ''}`}
-            onClick={() => { setActiveNav('home'); setView('workspace'); setMobileSidebarOpen(false); }}
-          >
+          <button className={`app-nav-item ${activeNav === 'workspace' ? 'active' : ''}`} onClick={openWorkspace}>
             <HomeIcon />
             <span>Home</span>
           </button>
-          <button
-            className={`app-nav-item ${activeNav === 'shared' ? 'active' : ''}`}
-            onClick={() => { setActiveNav('shared'); setView('workspace'); setMobileSidebarOpen(false); }}
-          >
+          <button className={`app-nav-item ${activeNav === 'shared' ? 'active' : ''}`} onClick={openWorkspace}>
             <ShareIcon />
             <span>Shared with me</span>
           </button>
-          <button
-            className={`app-nav-item ${activeNav === 'chat' ? 'active' : ''}`}
-            onClick={() => { setActiveNav('chat'); setView('chat'); setMobileSidebarOpen(false); }}
-          >
+          <button className={`app-nav-item ${activeNav === 'chat' ? 'active' : ''}`} onClick={openChat}>
             <ChatIcon />
             <span>Chat</span>
+          </button>
+          <button className={`app-nav-item ${activeNav === 'docs' ? 'active' : ''}`} onClick={openDocs}>
+            <DocIcon />
+            <span>Documents</span>
           </button>
         </nav>
 
         <div className="app-spaces">
           <div className="app-spaces-header">
             <span>Spaces</span>
-            <button className="app-spaces-btn" title="Add space">
+            <button className="app-spaces-btn" title="Add space" onClick={createWorkspace}>
               <PlusIcon />
             </button>
           </div>
           <div>
-            {sampleSpaces.map((space) => (
-              <button
-                key={space.id}
-                className="app-space-item"
-                onClick={() => { setActiveNav('home'); setView('workspace'); setMobileSidebarOpen(false); }}
-              >
-                <span>{space.icon}</span>
+            {workspaces.map((space) => (
+              <button key={space._id} className="app-space-item" onClick={openWorkspace}>
+                <span>{(space.name || 'WS').slice(0, 4).toUpperCase()}</span>
                 <span className="truncate">{space.name}</span>
               </button>
             ))}
+            {workspaces.length === 0 && (
+              <button className="app-space-item" onClick={openWorkspace}>
+                <span>NEW</span>
+                <span className="truncate">Create your first workspace</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -255,9 +267,10 @@ function AppShell() {
           <div className="presence-list">
             {onlineUsers.slice(0, 5).map((u) => (
               <div key={u.userId} className="presence-item-compact">
-                <div className="presence-avatar-compact" style={{
-                  background: u.status === 'online' ? 'var(--color-success)' : '#f59e0b'
-                }}>
+                <div
+                  className="presence-avatar-compact"
+                  style={{ background: u.status === 'online' ? 'var(--color-success)' : '#f59e0b' }}
+                >
                   {(u.userName || '?')[0].toUpperCase()}
                 </div>
                 <span className="truncate">{u.userName}</span>
@@ -268,9 +281,7 @@ function AppShell() {
 
         <div className="app-footer">
           <div className="app-user">
-            <div className="app-user-avatar">
-              {user.name[0].toUpperCase()}
-            </div>
+            <div className="app-user-avatar">{user.name[0].toUpperCase()}</div>
             <span className="app-user-name">{user.name}</span>
           </div>
           <button className="app-logout-btn" onClick={logout} title="Sign out">
@@ -279,25 +290,31 @@ function AppShell() {
         </div>
       </div>
 
-      <div className={`layout-sidebar-backdrop ${mobileSidebarOpen ? 'visible' : ''}`} onClick={toggleMobileSidebar} />
+      <div className={`layout-sidebar-backdrop ${mobileSidebarOpen ? 'visible' : ''}`} onClick={() => setMobileSidebarOpen(false)} />
 
       <main className="layout-main">
         <header className="layout-main-header">
           <div className="header-left">
-            <button className="mobile-menu-btn desktop-hidden" onClick={toggleMobileSidebar}>
+            <button className="mobile-menu-btn desktop-hidden" onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}>
               <MenuIcon />
             </button>
             <div className="app-breadcrumb">
               <span className="app-breadcrumb-path">
-                {activeNav === 'home' ? 'Home' : activeNav === 'shared' ? 'Shared with me' : 'Chat'}
+                {activeNav === 'workspace' ? 'Home' : activeNav === 'chat' ? 'Chat' : 'Documents'}
               </span>
               <span className="app-breadcrumb-sep">/</span>
               <span className="app-breadcrumb-current">
-                {view === 'workspace' ? 'Team Hub' : view === 'chat' ? 'Conversations' : 'Documents'}
+                {view === 'workspace' ? 'Team Hub' : view === 'chat' ? 'Conversations' : 'Collaborative Editor'}
               </span>
             </div>
           </div>
           <div className="header-right">
+            {view === 'chat' && (
+              <button className="btn btn-primary" onClick={() => setShowNewConv(true)}>New chat</button>
+            )}
+            {view === 'editor' && (
+              <button className="btn btn-primary" onClick={createDocument}>New doc</button>
+            )}
             <NotificationBell />
             <div className="app-status">
               {connected ? (
@@ -306,7 +323,7 @@ function AppShell() {
                 <span>Offline</span>
               )}
             </div>
-            <button className="layout-right-panel-toggle" onClick={toggleRightPanel} title="Toggle panel">
+            <button className="layout-right-panel-toggle" onClick={() => setRightPanelOpen(!rightPanelOpen)} title="Toggle panel">
               {rightPanelOpen ? <PanelRightIcon /> : <PanelLeftIcon />}
             </button>
           </div>
@@ -314,9 +331,7 @@ function AppShell() {
 
         <div className="layout-main-content">
           <div className="layout-content-panel">
-            {view === 'home' ? (
-              <HomeScreen />
-            ) : view === 'workspace' ? (
+            {view === 'workspace' ? (
               <Workspace />
             ) : view === 'chat' ? (
               <Chat
@@ -331,6 +346,7 @@ function AppShell() {
                 setActiveDocId={setActiveDocId}
                 documents={documents}
                 setDocuments={setDocuments}
+                onCreateDocument={createDocument}
               />
             )}
           </div>
@@ -338,7 +354,7 @@ function AppShell() {
           <aside className={`layout-right-panel ${rightPanelOpen ? '' : 'collapsed'}`}>
             <div className="layout-right-panel-header">
               <span className="panel-title">Context</span>
-              <button className="layout-right-panel-toggle" onClick={toggleRightPanel}>
+              <button className="layout-right-panel-toggle" onClick={() => setRightPanelOpen(!rightPanelOpen)}>
                 <PanelRightIcon />
               </button>
             </div>
@@ -364,19 +380,45 @@ function AppShell() {
                 </div>
               </div>
               <div className="context-section">
-                <div className="context-section-header">Recent Activity</div>
+                <div className="context-section-header">{view === 'editor' ? 'Documents' : 'Recent Activity'}</div>
                 <div className="context-activity-list">
-                  {conversations.slice(0, 5).map((c) => (
-                    <div key={c._id} className="context-activity-item">
-                      <div className="context-activity-icon">💬</div>
-                      <div className="context-activity-info">
-                        <span className="context-activity-title">{c.name || 'Conversation'}</span>
-                        <span className="context-activity-time">
-                          {c.lastMessage ? new Date(c.updatedAt).toLocaleTimeString() : ''}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                  {view === 'editor'
+                    ? documents.slice(0, 5).map((doc) => (
+                        <button
+                          key={doc._id}
+                          className="context-activity-item"
+                          onClick={() => {
+                            setActiveDocId(doc._id);
+                            openDocs();
+                          }}
+                        >
+                          <div className="context-activity-icon">DOC</div>
+                          <div className="context-activity-info">
+                            <span className="context-activity-title">{doc.title || 'Untitled Document'}</span>
+                            <span className="context-activity-time">
+                              {doc.updatedAt ? new Date(doc.updatedAt).toLocaleTimeString() : ''}
+                            </span>
+                          </div>
+                        </button>
+                      ))
+                    : conversations.slice(0, 5).map((c) => (
+                        <button
+                          key={c._id}
+                          className="context-activity-item"
+                          onClick={() => {
+                            setActiveConvId(c._id);
+                            openChat();
+                          }}
+                        >
+                          <div className="context-activity-icon">CHAT</div>
+                          <div className="context-activity-info">
+                            <span className="context-activity-title">{c.name || 'Conversation'}</span>
+                            <span className="context-activity-time">
+                              {c.updatedAt ? new Date(c.updatedAt).toLocaleTimeString() : ''}
+                            </span>
+                          </div>
+                        </button>
+                      ))}
                 </div>
               </div>
             </div>
@@ -390,6 +432,7 @@ function AppShell() {
           onCreate={(conv) => {
             setConversations((prev) => [conv, ...prev]);
             setActiveConvId(conv._id);
+            openChat();
           }}
         />
       )}

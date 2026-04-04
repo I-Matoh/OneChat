@@ -73,7 +73,7 @@ export default function Chat({ activeConvId, setActiveConvId, conversations, set
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [typingUsers, setTypingUsers] = useState([]);
-  const [searchQuery, setSearchQuery] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [showAttachments, setShowAttachments] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
@@ -276,6 +276,7 @@ export default function Chat({ activeConvId, setActiveConvId, conversations, set
   const activeConv = conversations.find((c) => c._id === activeConvId);
   const displayName = activeConv?.name || activeConv?.participants?.filter((p) => (p._id || p) !== user.id).map((p) => p.name || 'User').join(', ') || 'Chat';
   const messageGroups = groupMessages(messages);
+  const participantStatus = activeConv?.participants?.some((participant) => participant.status === 'online') ? 'Online' : 'Away';
 
   return (
     <div className="chat-layout">
@@ -325,12 +326,12 @@ export default function Chat({ activeConvId, setActiveConvId, conversations, set
       <div className="chat-main">
         <div className="chat-header">
           <div className="chat-header-info">
-            <div className="chat-avatar">{displayName[0].toUpperCase()}</div>
-            <div className="chat-info">
-              <div className="chat-name">{displayName}</div>
-              <div className="chat-header-status">Online</div>
+              <div className="chat-avatar">{displayName[0].toUpperCase()}</div>
+              <div className="chat-info">
+                <div className="chat-name">{displayName}</div>
+                <div className="chat-header-status">{participantStatus}</div>
+              </div>
             </div>
-          </div>
           <div className="chat-header-actions">
             <button className="btn-icon" title="Voice call">📞</button>
             <button className="btn-icon" title="Video call">📹</button>
@@ -416,7 +417,7 @@ export default function Chat({ activeConvId, setActiveConvId, conversations, set
         <div className="contact-header">
           <div className="contact-avatar-large">{displayName[0].toUpperCase()}</div>
           <div className="contact-name">{displayName}</div>
-          <div className="contact-status">Online</div>
+          <div className="contact-status">{participantStatus}</div>
         </div>
         <div className="contact-details">
           <div className="contact-section">

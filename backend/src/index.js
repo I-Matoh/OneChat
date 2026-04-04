@@ -54,6 +54,10 @@ const collabRoutes       = require('./collaboration/collab.routes');
 const notificationRoutes = require('./notifications/notification.routes');
 const presenceRoutes     = require('./presence/presence.routes');
 const userRoutes         = require('./auth/user.routes');
+const aiRoutes           = require('./ai/ai.routes');
+const workspaceRoutes    = require('./workspace/workspace.routes');
+const searchRoutes       = require('./search/search.routes');
+const taskRoutes         = require('./tasks/task.routes');
 
 /**
  * Express application setup
@@ -99,6 +103,10 @@ app.use('/chat', chatRoutes);
 app.use('/docs', collabRoutes);
 app.use('/notifications', notificationRoutes);
 app.use('/presence', presenceRoutes);
+app.use('/ai', aiRoutes);
+app.use('/workspaces', workspaceRoutes);
+app.use('/search', searchRoutes);
+app.use('/tasks', taskRoutes);
 
 /**
  * Health check endpoint
@@ -106,6 +114,10 @@ app.use('/presence', presenceRoutes);
  * Returns basic status and current server timestamp.
  */
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: Date.now() }));
+
+app.use((req, res) => {
+  res.status(404).json({ error: 'Route not found' });
+});
 
 /**
  * Socket.IO real-time communication setup

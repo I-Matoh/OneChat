@@ -11,15 +11,50 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const stored = localStorage.getItem('onechat_auth');
-    if (stored) {
+    let cancelled = false;
+
+    async function bootstrapAuth() {
+      const stored = localStorage.getItem('onechat_auth');
+      if (!stored) {
+        if (!cancelled) setLoading(false);
+        return;
+      }
+
       try {
         const parsed = JSON.parse(stored);
-        setUser(parsed.user);
+        if (!parsed?.token) throw new Error('Missing token');
+
+        const res = await fetch(`${API}/auth/me`, {
+          headers: {
+            Authorization: `Bearer ${parsed.token}`,
+          },
+        });
+
+        if (!res.ok) throw new Error('Session expired');
+
+        const data = await res.json();
+        if (cancelled) return;
+
+        setUser(data.user);
         setToken(parsed.token);
-      } catch { /* ignore */ }
+        localStorage.setItem('onechat_auth', JSON.stringify({ token: parsed.token, user: data.user }));
+      } catch {
+        if (!cancelled) {
+          setUser(null);
+          setToken(null);
+          localStorage.removeItem('onechat_auth');
+          disconnectSocket();
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
-    setLoading(false);
+
+    bootstrapAuth();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = useCallback(async (email, password) => {

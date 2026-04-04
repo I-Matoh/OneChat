@@ -1,34 +1,5 @@
-import { useState } from 'react';
-
-const HomeIcon = () => (
-  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-  </svg>
-);
-
-const ShareIcon = () => (
-  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-  </svg>
-);
-
-const ChatIcon = () => (
-  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-  </svg>
-);
-
-const SearchIcon = () => (
-  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-  </svg>
-);
-
-const SendIcon = () => (
-  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-  </svg>
-);
+import { useEffect, useMemo, useState } from 'react';
+import { useApi } from '../hooks/useApi';
 
 const FolderIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -36,191 +7,247 @@ const FolderIcon = () => (
   </svg>
 );
 
-const PlusIcon = () => (
-  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-  </svg>
-);
-
-const ChevronIcon = ({ className }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-  </svg>
-);
-
-const mockData = {
-  companies: [
-    { id: 1, name: 'Acme Corp', people: ['JD', 'MK', 'AS'], notes: 12, lastNote: '2h ago' },
-    { id: 2, name: 'TechStart Inc', people: ['RB', 'LP'], notes: 8, lastNote: '1d ago' },
-    { id: 3, name: 'Global Solutions', people: ['TW', 'HN', 'JC', 'BM'], notes: 24, lastNote: '3h ago' },
-    { id: 4, name: 'Innovation Labs', people: ['AK'], notes: 5, lastNote: '5d ago' },
-    { id: 5, name: 'Digital Dynamics', people: ['MS', 'DG'], notes: 15, lastNote: '6h ago' },
-  ]
-};
-
-const tabs = ['Notes', 'Files', 'Companies', 'People'];
-const actions = ['Recent Notes', 'Summarize Notes', 'Show Insights', 'Auto-tags'];
-
 export default function Workspace() {
-  const [activeTab, setActiveTab] = useState('Companies');
-  const [activeNav, setActiveNav] = useState('home');
-  const [query, setQuery] = useState('');
+  const { apiFetch } = useApi();
+
+  const [workspaces, setWorkspaces] = useState([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState(null);
+  const [pages, setPages] = useState([]);
+  const [activePageId, setActivePageId] = useState(null);
+  const [workspaceName, setWorkspaceName] = useState('');
+  const [pageTitle, setPageTitle] = useState('');
+  const [saveState, setSaveState] = useState('Saved');
+  const [error, setError] = useState('');
+
+  const activePage = useMemo(
+    () => pages.find((item) => item._id === activePageId) || null,
+    [pages, activePageId]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadWorkspaces() {
+      try {
+        const list = await apiFetch('/workspaces');
+        if (cancelled) return;
+        setWorkspaces(list || []);
+        if (list?.length) setActiveWorkspaceId(list[0]._id);
+      } catch (err) {
+        if (!cancelled) setError(err.message || 'Unable to load workspaces');
+      }
+    }
+    loadWorkspaces();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiFetch]);
+
+  useEffect(() => {
+    if (!activeWorkspaceId) {
+      setPages([]);
+      setActivePageId(null);
+      return;
+    }
+
+    let cancelled = false;
+    async function loadPages() {
+      try {
+        const list = await apiFetch(`/workspaces/${activeWorkspaceId}/pages`);
+        if (cancelled) return;
+        setPages(list || []);
+        if (list?.length) setActivePageId(list[0]._id);
+      } catch (err) {
+        if (!cancelled) setError(err.message || 'Unable to load pages');
+      }
+    }
+    loadPages();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkspaceId, apiFetch]);
+
+  async function createWorkspace() {
+    if (!workspaceName.trim()) return;
+    try {
+      const created = await apiFetch('/workspaces', {
+        method: 'POST',
+        body: JSON.stringify({ name: workspaceName.trim() }),
+      });
+      setWorkspaces((prev) => [created, ...prev]);
+      setActiveWorkspaceId(created._id);
+      setWorkspaceName('');
+      setError('');
+    } catch (err) {
+      setError(err.message || 'Unable to create workspace');
+    }
+  }
+
+  async function createPage() {
+    if (!activeWorkspaceId) return;
+    try {
+      const created = await apiFetch(`/workspaces/${activeWorkspaceId}/pages`, {
+        method: 'POST',
+        body: JSON.stringify({ title: pageTitle.trim() || 'Untitled Page' }),
+      });
+      setPages((prev) => [created, ...prev]);
+      setActivePageId(created._id);
+      setPageTitle('');
+      setError('');
+    } catch (err) {
+      setError(err.message || 'Unable to create page');
+    }
+  }
+
+  async function savePage(content) {
+    if (!activePageId) return;
+    setSaveState('Saving...');
+    try {
+      const updated = await apiFetch(`/workspaces/pages/${activePageId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          title: activePage?.title || 'Untitled Page',
+          content,
+        }),
+      });
+      setPages((prev) => prev.map((item) => (item._id === updated._id ? updated : item)));
+      setSaveState('Saved');
+      setError('');
+    } catch (err) {
+      setSaveState('Save failed');
+      setError(err.message || 'Unable to save page');
+    }
+  }
 
   return (
     <div className="workspace-layout">
-      {/* Left Sidebar */}
       <aside className="workspace-sidebar">
         <div className="workspace-sidebar-header">
           <div className="workspace-logo">
             <span className="workspace-logo-icon">O</span>
-            <span className="workspace-logo-text">OneChat</span>
+            <span className="workspace-logo-text">Workspaces</span>
           </div>
         </div>
 
-        <div className="workspace-search">
-          <SearchIcon />
-          <input 
-            type="text" 
-            placeholder="Search..." 
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+        <div className="workspace-input-section">
+          <div className="workspace-input-wrapper">
+            <input
+              type="text"
+              className="workspace-input"
+              placeholder="New workspace name"
+              value={workspaceName}
+              onChange={(e) => setWorkspaceName(e.target.value)}
+            />
+            <button className="workspace-input-btn" onClick={createWorkspace}>
+              Create
+            </button>
+          </div>
         </div>
-
-        <nav className="workspace-nav">
-          <button 
-            className={`workspace-nav-item ${activeNav === 'home' ? 'active' : ''}`}
-            onClick={() => setActiveNav('home')}
-          >
-            <HomeIcon />
-            <span>Home</span>
-          </button>
-          <button 
-            className={`workspace-nav-item ${activeNav === 'shared' ? 'active' : ''}`}
-            onClick={() => setActiveNav('shared')}
-          >
-            <ShareIcon />
-            <span>Shared</span>
-          </button>
-          <button 
-            className={`workspace-nav-item ${activeNav === 'chat' ? 'active' : ''}`}
-            onClick={() => setActiveNav('chat')}
-          >
-            <ChatIcon />
-            <span>Chat</span>
-          </button>
-        </nav>
 
         <div className="workspace-section">
           <div className="workspace-section-header">
-            <span>Workspace</span>
-            <button className="workspace-section-btn"><PlusIcon /></button>
+            <span>Your Workspaces</span>
           </div>
           <div className="workspace-section-items">
-            <div className="workspace-section-item">
-              <FolderIcon />
-              <span>My Notes</span>
-            </div>
-            <div className="workspace-section-item">
-              <FolderIcon />
-              <span>Team Notes</span>
-            </div>
-            <div className="workspace-section-item">
-              <FolderIcon />
-              <span>Projects</span>
-            </div>
+            {workspaces.map((workspace) => (
+              <button
+                key={workspace._id}
+                className={`workspace-section-item ${activeWorkspaceId === workspace._id ? 'active' : ''}`}
+                onClick={() => setActiveWorkspaceId(workspace._id)}
+              >
+                <FolderIcon />
+                <span>{workspace.name}</span>
+              </button>
+            ))}
+            {workspaces.length === 0 && (
+              <div className="workspace-section-item">Create your first workspace</div>
+            )}
           </div>
         </div>
       </aside>
 
-      {/* Main Panel */}
       <main className="workspace-main">
-        {/* Header */}
         <header className="workspace-header">
           <div className="workspace-header-left">
-            <h1 className="workspace-title">User calls</h1>
-            <p className="workspace-subtitle">Manage your contacts and notes</p>
-          </div>
-          <div className="workspace-header-right">
-            <button className="workspace-btn-secondary">
-              <span>Integrations</span>
-            </button>
+            <h1 className="workspace-title">
+              {workspaces.find((item) => item._id === activeWorkspaceId)?.name || 'Workspace'}
+            </h1>
+            <p className="workspace-subtitle">{saveState}</p>
           </div>
         </header>
 
-        {/* AI Input */}
+        {error && (
+          <div style={{ color: 'var(--color-error)', marginBottom: 12 }}>{error}</div>
+        )}
+
         <div className="workspace-input-section">
           <div className="workspace-input-wrapper">
-            <input 
-              type="text" 
+            <input
+              type="text"
               className="workspace-input"
-              placeholder="Ask AI anything..."
+              placeholder="New page title"
+              value={pageTitle}
+              onChange={(e) => setPageTitle(e.target.value)}
             />
-            <button className="workspace-input-btn">
-              <SendIcon />
+            <button className="workspace-input-btn" onClick={createPage} disabled={!activeWorkspaceId}>
+              Add Page
             </button>
           </div>
         </div>
 
-        {/* Action Row */}
-        <div className="workspace-actions">
-          {actions.map((action) => (
-            <button key={action} className="workspace-action-chip">
-              {action}
-            </button>
-          ))}
-        </div>
+        <div className="workspace-table-container" style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 12 }}>
+          <div className="workspace-section-items">
+            {pages.map((item) => (
+              <button
+                key={item._id}
+                className={`workspace-section-item ${activePageId === item._id ? 'active' : ''}`}
+                onClick={() => setActivePageId(item._id)}
+              >
+                <FolderIcon />
+                <span>{item.title || 'Untitled Page'}</span>
+              </button>
+            ))}
+            {pages.length === 0 && (
+              <div className="workspace-section-item">No pages in this workspace yet</div>
+            )}
+          </div>
 
-        {/* Tabs */}
-        <div className="workspace-tabs">
-          {tabs.map((tab) => (
-            <button 
-              key={tab}
-              className={`workspace-tab ${activeTab === tab ? 'active' : ''}`}
-              onClick={() => setActiveTab(tab)}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-
-        {/* Data Table */}
-        <div className="workspace-table-container">
-          <table className="workspace-table">
-            <thead>
-              <tr>
-                <th>Company</th>
-                <th>People</th>
-                <th>Notes</th>
-                <th>Last Note</th>
-              </tr>
-            </thead>
-            <tbody>
-              {mockData.companies.map((company) => (
-                <tr key={company.id}>
-                  <td className="workspace-table-company">
-                    <span className="workspace-company-avatar">{company.name[0]}</span>
-                    {company.name}
-                  </td>
-                  <td>
-                    <div className="workspace-people-avatars">
-                      {company.people.map((person, idx) => (
-                        <span 
-                          key={idx} 
-                          className="workspace-person-avatar"
-                          style={{ '--idx': idx }}
-                        >
-                          {person}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="workspace-notes-count">{company.notes}</td>
-                  <td className="workspace-last-note">{company.lastNote}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="workspace-table" style={{ display: 'block', padding: 12 }}>
+            {activePage ? (
+              <>
+                <input
+                  className="input"
+                  value={activePage.title || ''}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setPages((prev) => prev.map((item) => (
+                      item._id === activePage._id ? { ...item, title: value } : item
+                    )));
+                  }}
+                  onBlur={() => savePage(activePage.content || '')}
+                  placeholder="Page title"
+                />
+                <textarea
+                  className="chat-input"
+                  style={{ minHeight: 380, width: '100%', border: '1px solid var(--color-border)', borderRadius: 12, marginTop: 12, padding: 12 }}
+                  value={activePage.content || ''}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setSaveState('Editing...');
+                    setPages((prev) => prev.map((item) => (
+                      item._id === activePage._id ? { ...item, content: value } : item
+                    )));
+                  }}
+                  onBlur={(e) => savePage(e.target.value)}
+                  placeholder="Write your notes here..."
+                />
+              </>
+            ) : (
+              <div className="empty-state">
+                <div className="empty-title">Select a page</div>
+                <div className="empty-hint">Create or choose a page to start writing</div>
+              </div>
+            )}
+          </div>
         </div>
       </main>
     </div>

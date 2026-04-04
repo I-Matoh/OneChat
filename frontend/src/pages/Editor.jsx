@@ -7,7 +7,7 @@ const MaterialIcon = ({ icon, className = '' }) => (
   <span className={`material-symbols-outlined ${className}`}>{icon}</span>
 );
 
-export default function Editor({ activeDocId, setActiveDocId, documents, setDocuments }) {
+export default function Editor({ activeDocId, setActiveDocId, documents, setDocuments, onCreateDocument }) {
   const { user, token } = useAuth();
   const { apiFetch } = useApi();
   const [doc, setDoc] = useState(null);
@@ -18,39 +18,63 @@ export default function Editor({ activeDocId, setActiveDocId, documents, setDocu
   const [cursorPositions, setCursorPositions] = useState({});
   const [showAI, setShowAI] = useState(false);
   const saveTimeout = useRef(null);
-  const isRemoteUpdate = useRef(false);
+  const revisionRef = useRef(0);
+  const baseContentRef = useRef('');
 
   useEffect(() => {
     if (!activeDocId) return;
-    apiFetch(`/docs/${activeDocId}`).then((d) => {
-      setDoc(d);
-      setContent(d.content || '');
-      setTitle(d.title || '');
-      setCollaborators(d.collaborators || []);
+    apiFetch(`/docs/${activeDocId}`).then((nextDoc) => {
+      setDoc(nextDoc);
+      setContent(nextDoc.content || '');
+      setTitle(nextDoc.title || '');
+      setCollaborators(nextDoc.collaborators || []);
+      revisionRef.current = nextDoc.revision || 0;
+      baseContentRef.current = nextDoc.content || '';
     }).catch(() => {});
-  }, [activeDocId]);
+  }, [activeDocId, apiFetch]);
 
   useEffect(() => {
     if (!activeDocId || !token) return;
     const s = getSocket(token);
     s.emit('doc:join', activeDocId);
-    return () => { s.emit('doc:leave', activeDocId); };
+    return () => {
+      s.emit('doc:leave', activeDocId);
+    };
   }, [activeDocId, token]);
 
   useSocketEvent('doc:update', useCallback((data) => {
     if (data.docId === activeDocId && data.editedBy !== user.id) {
-      isRemoteUpdate.current = true;
+      setTitle(data.title || '');
       setContent(data.content);
-      setSaveStatus(`Edited by ${data.editorName}`);
+      revisionRef.current = data.revision || revisionRef.current;
+      baseContentRef.current = data.content || '';
+      setSaveStatus(data.conflict ? `Conflict merged from ${data.editorName}` : `Edited by ${data.editorName}`);
       setTimeout(() => setSaveStatus('Synced'), 2000);
     }
-  }, [activeDocId, user]));
+  }, [activeDocId, user.id]));
+
+  useSocketEvent('doc:sync', useCallback((data) => {
+    if (data.docId !== activeDocId) return;
+    setTitle(data.title || '');
+    setContent(data.content || '');
+    revisionRef.current = data.revision || 0;
+    baseContentRef.current = data.content || '';
+    setSaveStatus('Synced');
+  }, [activeDocId]));
+
+  useSocketEvent('doc:ack', useCallback((data) => {
+    if (data.docId !== activeDocId) return;
+    revisionRef.current = data.revision || revisionRef.current;
+    baseContentRef.current = data.content || '';
+    setContent(data.content || '');
+    setSaveStatus(data.conflict ? 'Merged with conflicts' : 'Saved');
+  }, [activeDocId]));
 
   useSocketEvent('doc:cursor', useCallback((data) => {
     if (data.userId !== user.id) {
       setCursorPositions((prev) => ({ ...prev, [data.userId]: data }));
     }
-  }, [user]));
+  }, [user.id]));
 
   useSocketEvent('doc:user-joined', useCallback((data) => {
     setCollaborators((prev) => {
@@ -71,6 +95,12 @@ export default function Editor({ activeDocId, setActiveDocId, documents, setDocu
     setCursorPositions(data);
   }, []));
 
+  function syncDocumentList(nextTitle, nextUpdatedAt = new Date().toISOString()) {
+    setDocuments((prev) => prev.map((item) => (
+      item._id === activeDocId ? { ...item, title: nextTitle, updatedAt: nextUpdatedAt } : item
+    )));
+  }
+
   function handleContentChange(e) {
     const val = e.target.value;
     setContent(val);
@@ -79,8 +109,15 @@ export default function Editor({ activeDocId, setActiveDocId, documents, setDocu
     if (saveTimeout.current) clearTimeout(saveTimeout.current);
     saveTimeout.current = setTimeout(() => {
       const s = getSocket(token);
-      s.emit('doc:update', { docId: activeDocId, content: val });
-      setSaveStatus('Saved');
+      s.emit('doc:update', {
+        docId: activeDocId,
+        title,
+        content: val,
+        baseRevision: revisionRef.current,
+        baseContent: baseContentRef.current,
+      });
+      setSaveStatus('Saving...');
+      syncDocumentList(title);
     }, 500);
 
     const s = getSocket(token);
@@ -92,6 +129,19 @@ export default function Editor({ activeDocId, setActiveDocId, documents, setDocu
     });
   }
 
+  async function persistTitle() {
+    try {
+      const updated = await apiFetch(`/docs/${activeDocId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ title }),
+      });
+      setDoc(updated);
+      syncDocumentList(updated.title, updated.updatedAt);
+    } catch {
+      setSaveStatus('Unable to save title');
+    }
+  }
+
   if (!activeDocId) {
     return (
       <div className="editor-empty-state">
@@ -99,7 +149,23 @@ export default function Editor({ activeDocId, setActiveDocId, documents, setDocu
           <MaterialIcon icon="description" />
         </div>
         <div className="editor-empty-title">Select a document</div>
-        <div className="editor-empty-hint">Choose from the sidebar or create a new one</div>
+        <div className="editor-empty-hint">Choose a live document or create a new one</div>
+        <div style={{ display: 'grid', gap: 12, width: 'min(680px, 100%)', marginTop: 24 }}>
+          {documents.map((item) => (
+            <button
+              key={item._id}
+              className="workspace-section-item"
+              style={{ justifyContent: 'space-between' }}
+              onClick={() => setActiveDocId(item._id)}
+            >
+              <span>{item.title || 'Untitled Document'}</span>
+              <span style={{ color: 'var(--color-muted)', fontSize: 12 }}>
+                {item.updatedAt ? new Date(item.updatedAt).toLocaleString() : ''}
+              </span>
+            </button>
+          ))}
+          <button className="btn btn-primary" onClick={onCreateDocument}>Create document</button>
+        </div>
       </div>
     );
   }
@@ -113,7 +179,11 @@ export default function Editor({ activeDocId, setActiveDocId, documents, setDocu
             <input
               className="collab-title-input"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                syncDocumentList(e.target.value);
+              }}
+              onBlur={persistTitle}
               placeholder="Untitled Document"
             />
           </div>
@@ -128,7 +198,7 @@ export default function Editor({ activeDocId, setActiveDocId, documents, setDocu
                 <div className="collab-avatar collab-avatar-more">+{collaborators.length - 4}</div>
               )}
             </div>
-            <button 
+            <button
               className="collab-ai-btn"
               onClick={() => setShowAI(!showAI)}
             >
@@ -172,12 +242,12 @@ export default function Editor({ activeDocId, setActiveDocId, documents, setDocu
           <div className="collab-editor-wrapper">
             <div className="collab-cursors">
               {Object.entries(cursorPositions).map(([userId, data]) => (
-                <div 
-                  key={userId} 
+                <div
+                  key={userId}
                   className="collab-cursor"
-                  style={{ 
+                  style={{
                     top: (data.line - 1) * 24,
-                    left: data.ch * 8 + 20
+                    left: data.ch * 8 + 20,
                   }}
                 >
                   <div className="collab-cursor-line" />
@@ -246,11 +316,11 @@ export default function Editor({ activeDocId, setActiveDocId, documents, setDocu
           <div className="ai-metadata">
             <div className="ai-metadata-item">
               <span>Last edited</span>
-              <span>2 mins ago</span>
+              <span>{doc?.updatedAt ? new Date(doc.updatedAt).toLocaleTimeString() : 'Just now'}</span>
             </div>
             <div className="ai-metadata-item">
               <span>Reading time</span>
-              <span>4 mins</span>
+              <span>{Math.max(1, Math.ceil(content.split(/\s+/).filter(Boolean).length / 180))} mins</span>
             </div>
             <div className="ai-metadata-item">
               <span>Visibility</span>

@@ -50,6 +50,8 @@ router.get('/conversations/:id/messages', authMiddleware, async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 50;
     const skip = (page - 1) * limit;
+    const conversation = await Conversation.findOne({ _id: id, participants: req.user.id });
+    if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
 
     const messages = await Message.find({ conversationId: id })
       .sort({ createdAt: -1 })

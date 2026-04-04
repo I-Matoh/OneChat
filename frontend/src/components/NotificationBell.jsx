@@ -59,6 +59,9 @@ export default function NotificationBell() {
                 notifications.slice(0, 20).map((n) => (
                   <div key={n._id} className={`notification-item ${!n.read ? 'unread' : ''}`}>
                     <div className="notification-text">{n.message}</div>
+                    <div className="notification-time" style={{ textTransform: 'capitalize' }}>
+                      {String(n.type || 'system').replace('_', ' ')}
+                    </div>
                     <div className="notification-time">{formatTime(n.createdAt)}</div>
                   </div>
                 ))
