@@ -1,3 +1,11 @@
+/**
+ * Document Model
+ * 
+ * Collaborative document with version history. Supports real-time
+ * editing by multiple users with conflict detection. Maintains array
+ * of versions for history and rollback capability.
+ */
+
 const mongoose = require('mongoose');
 
 const documentSchema = new mongoose.Schema({

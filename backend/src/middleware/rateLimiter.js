@@ -23,6 +23,7 @@
  */
 
 const { getRedis } = require('../config/redis');
+const { AppError } = require('./errors');
 
 function rateLimiter(windowMs = 60000, maxHits = 30) {
   return async (req, res, next) => {
@@ -32,7 +33,7 @@ function rateLimiter(windowMs = 60000, maxHits = 30) {
       const current = await redis.incr(key);
       if (current === 1) await redis.pexpire(key, windowMs);
       if (current > maxHits) {
-        return res.status(429).json({ error: 'Too many requests' });
+        return next(new AppError('Too many requests', 429, 'RATE_LIMITED'));
       }
       next();
     } catch {

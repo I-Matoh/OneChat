@@ -1,19 +1,15 @@
-
 /**
- * LiveSync Backend Server
+ * LiveSync Backend - Main Entry Point
  * 
- * This is the main entry point for the LiveSync real-time collaboration platform.
- * It sets up:
- *   - Express REST API for authentication, chat, notifications, and presence
- *   - Socket.IO for real-time bidirectional communication
- *   - MongoDB database connection via Mongoose
- *   - Redis for caching and rate limiting
+ * Express server with Socket.IO for real-time collaboration.
+ * Sets up middleware, routes, and WebSocket handlers.
  * 
- * The server enforces security best practices:
- *   - JWT-based authentication for both REST and WebSocket connections
- *   - Rate limiting to prevent brute-force and DoS attacks
- *   - Input validation and sanitization
- *   - Security headers to mitigate common web vulnerabilities
+ * Security features:
+ *   - JWT_SECRET validation on startup
+ *   - CORS configuration from CLIENT_URL
+ *   - Security headers (X-Content-Type-Options, X-Frame-Options, etc.)
+ *   - Request body size limit (10kb)
+ *   - Rate limiting on auth endpoints
  */
 
 require('dotenv').config();
@@ -22,68 +18,62 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
+const mongoose = require('mongoose');
 const connectDB = require('./config/db');
+const { getRedis } = require('./config/redis');
 const { initSocketServer } = require('./websocket/socketServer');
+const { errorHandler, notFoundHandler, AppError } = require('./middleware/errors');
+const { logger, httpLogger, requestIdMiddleware } = require('./logger');
 
 /**
- * Security: Validate critical environment variables on startup.
- * JWT_SECRET is required for token signing/verification - abort if missing.
- * A minimum length requirement prevents weak secret keys.
+ * Validate required environment variables on startup.
+ * JWT_SECRET must be at least 32 characters for adequate security.
  */
 if (!process.env.JWT_SECRET) {
-  console.error('FATAL: JWT_SECRET environment variable is required');
+  logger.error('JWT_SECRET environment variable is required');
   process.exit(1);
 }
 if (process.env.JWT_SECRET.length < 32) {
-  console.error('FATAL: JWT_SECRET must be at least 32 characters for secure token signing');
+  logger.error('JWT_SECRET must be at least 32 characters');
   process.exit(1);
 }
 
 /**
- * Route modules for different functional areas:
- *   - /auth: User registration, login, token management
- *   - /users: User profile and user search operations
- *   - /chat: Message history, conversation management
- *   - /docs: Real-time document collaboration
- *   - /notifications: Push notification delivery
- *   - /presence: Online/offline status tracking
+ * Import all route modules.
  */
-const authRoutes         = require('./auth/auth.routes');
-const chatRoutes         = require('./chat/chat.routes');
-const collabRoutes       = require('./collaboration/collab.routes');
+const authRoutes = require('./auth/auth.routes');
+const chatRoutes = require('./chat/chat.routes');
+const collabRoutes = require('./collaboration/collab.routes');
 const notificationRoutes = require('./notifications/notification.routes');
-const presenceRoutes     = require('./presence/presence.routes');
-const userRoutes         = require('./auth/user.routes');
-const aiRoutes           = require('./ai/ai.routes');
-const workspaceRoutes    = require('./workspace/workspace.routes');
-const searchRoutes       = require('./search/search.routes');
-const taskRoutes         = require('./tasks/task.routes');
-const activityRoutes     = require('./activity/activity.routes');
+const presenceRoutes = require('./presence/presence.routes');
+const userRoutes = require('./auth/user.routes');
+const aiRoutes = require('./ai/ai.routes');
+const workspaceRoutes = require('./workspace/workspace.routes');
+const searchRoutes = require('./search/search.routes');
+const taskRoutes = require('./tasks/task.routes');
+const activityRoutes = require('./activity/activity.routes');
 
-/**
- * Express application setup
- * We use the native http module to create the server, then pass it to Socket.IO.
- * This allows WebSocket and HTTP traffic on the same port.
- */
 const app = express();
 const server = http.createServer(app);
 
 /**
- * Middleware configuration
- * 
- * CORS: Restricts cross-origin requests to the configured CLIENT_URL.
- *       This prevents unauthorized domains from making API requests.
- * 
- * Security headers: Adds HTTP headers to protect against common attacks:
- *   - X-Content-Type-Options: Prevents MIME type sniffing
- *   - X-Frame-Options: Prevents clickjacking via iframe embedding
- *   - X-XSS-Protection: Enables browser's XSS filter
- *   - Referrer-Policy: Controls referrer information sent with requests
- * 
- * JSON body parser: Limited to 10kb to prevent large payload DoS attacks.
+ * HTTP request logging with pino-http.
+ */
+app.use(httpLogger);
+
+/**
+ * Request ID middleware for tracing.
+ */
+app.use(requestIdMiddleware);
+
+/**
+ * CORS configuration - only allow requests from the configured client URL.
  */
 app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
 
+/**
+ * Security headers to prevent common browser-based attacks.
+ */
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -92,11 +82,13 @@ app.use((req, res, next) => {
   next();
 });
 
+/**
+ * JSON body parser with size limit to prevent large payload attacks.
+ */
 app.use(express.json({ limit: '10kb' }));
 
 /**
- * REST API route registration
- * Each route module handles a specific functional domain
+ * Register all API routes under their base paths.
  */
 app.use('/auth', authRoutes);
 app.use('/users', userRoutes);
@@ -111,22 +103,46 @@ app.use('/tasks', taskRoutes);
 app.use('/activity', activityRoutes);
 
 /**
- * Health check endpoint
- * Used by load balancers and monitoring systems to verify server availability.
- * Returns basic status and current server timestamp.
+ * Health check endpoint - basic server status.
  */
-app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: Date.now() }));
-
-app.use((req, res) => {
-  res.status(404).json({ error: 'Route not found' });
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: Date.now() });
 });
 
 /**
- * Socket.IO real-time communication setup
- * 
- * Socket.IO extends the HTTP server to support WebSocket connections.
- * The same CORS configuration as the REST API ensures consistent security.
- * The initSocketServer function registers all event handlers and middleware.
+ * Readiness check endpoint - verifies MongoDB and Redis connectivity.
+ */
+app.get('/ready', async (req, res, next) => {
+  try {
+    const mongoReady = mongoose.connection.readyState === 1;
+    let redisReady = false;
+    try {
+      const pong = await getRedis().ping();
+      redisReady = pong === 'PONG';
+    } catch {
+      redisReady = false;
+    }
+
+    if (!mongoReady || !redisReady) {
+      throw new AppError('Service not ready', 503, 'SERVICE_NOT_READY', {
+        mongoReady,
+        redisReady,
+      });
+    }
+    res.json({ status: 'ready', timestamp: Date.now(), mongoReady, redisReady });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Error handling middleware (must be registered after all routes).
+ */
+app.use(notFoundHandler);
+app.use(errorHandler);
+
+/**
+ * Initialize Socket.IO with CORS and attach to app for route access.
  */
 const io = new Server(server, {
   cors: { origin: process.env.CLIENT_URL, credentials: true },
@@ -134,16 +150,14 @@ const io = new Server(server, {
 app.set('io', io);
 initSocketServer(io);
 
-/**
- * Server startup
- * 
- * The server only starts after successful database connection.
- * This ensures the API is not accepting requests before data layer is ready.
- */
 const PORT = process.env.PORT || 5000;
 
+/**
+ * Connect to MongoDB and start the HTTP server.
+ */
 connectDB().then(() => {
   server.listen(PORT, () => {
-    console.log(`🚀 LiveSync server running on port ${PORT}`);
+    logger.info({ port: PORT }, 'LiveSync server running');
   });
 });
+

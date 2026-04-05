@@ -1,5 +1,17 @@
+/**
+ * Workspace Access Control
+ * 
+ * Utilities for workspace authorization and role checking.
+ * Defines role hierarchy and provides helper functions for
+ * determining user permissions within workspaces.
+ */
+
 const Workspace = require('../models/Workspace');
 
+/**
+ * Role hierarchy ranks for permission comparison.
+ * Higher rank means more permissions.
+ */
 const ROLE_RANK = {
   viewer: 1,
   commenter: 2,
@@ -8,10 +20,16 @@ const ROLE_RANK = {
   owner: 5,
 };
 
+/**
+ * Normalize ID to string for consistent comparison.
+ */
 function normalizeId(value) {
   return value?.toString?.() || String(value);
 }
 
+/**
+ * Get user's role in a workspace.
+ */
 function getRoleForUser(workspace, userId) {
   const uid = normalizeId(userId);
   if (normalizeId(workspace.ownerId) === uid) return 'owner';
@@ -19,6 +37,9 @@ function getRoleForUser(workspace, userId) {
   return member?.role || null;
 }
 
+/**
+ * Check if user has minimum required role in workspace.
+ */
 function hasRole(workspace, userId, minimumRole = 'viewer') {
   const role = getRoleForUser(workspace, userId);
   if (!role) return false;

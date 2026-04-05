@@ -18,6 +18,7 @@
 
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { AppError, asyncHandler } = require('../middleware/errors');
 
 /**
  * Register a new user
@@ -29,22 +30,15 @@ const User = require('../models/User');
  * @param {Object} req  - Express request with { name, email, password } in body
  * @param {Object} res  - Express response
  */
-async function register(req, res) {
-  try {
-    const { name, email, password } = req.body;
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: 'name, email, and password are required' });
-    }
-    const exists = await User.findOne({ email });
-    if (exists) return res.status(409).json({ error: 'Email already in use' });
+const register = asyncHandler(async (req, res) => {
+  const { name, email, password } = req.body;
+  const exists = await User.findOne({ email });
+  if (exists) throw new AppError('Email already in use', 409, 'EMAIL_IN_USE');
 
-    const user = await User.create({ name, email, passwordHash: password });
-    const token = jwt.sign({ id: user._id, name: user.name, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    res.status(201).json({ token, user: user.toPublic() });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-}
+  const user = await User.create({ name, email, passwordHash: password });
+  const token = jwt.sign({ id: user._id, name: user.name, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
+  res.status(201).json({ token, user: user.toPublic() });
+});
 
 /**
  * Authenticate an existing user
@@ -56,32 +50,22 @@ async function register(req, res) {
  * @param {Object} req  - Express request with { email, password } in body
  * @param {Object} res  - Express response
  */
-async function login(req, res) {
-  try {
-    const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ error: 'email and password are required' });
+const login = asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
+  const user = await User.findOne({ email });
+  if (!user) throw new AppError('Invalid credentials', 401, 'INVALID_CREDENTIALS');
 
-    const user = await User.findOne({ email });
-    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+  const match = await user.comparePassword(password);
+  if (!match) throw new AppError('Invalid credentials', 401, 'INVALID_CREDENTIALS');
 
-    const match = await user.comparePassword(password);
-    if (!match) return res.status(401).json({ error: 'Invalid credentials' });
+  const token = jwt.sign({ id: user._id, name: user.name, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
+  res.json({ token, user: user.toPublic() });
+});
 
-    const token = jwt.sign({ id: user._id, name: user.name, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: user.toPublic() });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-}
-
-async function me(req, res) {
-  try {
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json({ user: user.toPublic() });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-}
+const me = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user.id);
+  if (!user) throw new AppError('User not found', 404, 'USER_NOT_FOUND');
+  res.json({ user: user.toPublic() });
+});
 
 module.exports = { register, login, me };

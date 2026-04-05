@@ -1,36 +1,67 @@
+/**
+ * Presence Service
+ * 
+ * Manages user online/offline/away status via WebSocket heartbeats.
+ * Uses Redis for distributed presence tracking across multiple server instances.
+ * 
+ * Status lifecycle: online -> away -> offline
+ * Heartbeat interval: 10s, Away threshold: 30s, Offline threshold: 60s
+ */
+
 const { getRedis } = require('../config/redis');
 const User = require('../models/User');
 
 const HEARTBEAT_INTERVAL = 10000; // 10 seconds
-const AWAY_THRESHOLD = 30000;     // 30 seconds
-const OFFLINE_THRESHOLD = 60000;  // 60 seconds
+const AWAY_THRESHOLD = 30000; // 30 seconds
+const OFFLINE_THRESHOLD = 60000; // 60 seconds
 let monitorStarted = false;
 
+/**
+ * Scan all presence keys from Redis.
+ * Uses Redis SCAN for efficient key iteration without blocking.
+ */
+async function scanPresenceKeys(redis) {
+  const keys = [];
+  let cursor = '0';
+  do {
+    const [nextCursor, batch] = await redis.scan(cursor, 'MATCH', 'presence:*', 'COUNT', 100);
+    cursor = nextCursor;
+    if (Array.isArray(batch) && batch.length > 0) {
+      keys.push(...batch);
+    }
+  } while (cursor !== '0');
+  return keys;
+}
+
+/**
+ * Register presence handlers for a connected socket.
+ * Sets up heartbeat listeners and presence status tracking.
+ */
 function registerPresenceHandlers(io, socket) {
   const userId = socket.user.id;
   const userName = socket.user.name;
 
   startPresenceMonitor(io);
 
-  // Set user online
   setPresence(io, userId, userName, 'online');
 
-  // Heartbeat
   socket.on('presence:heartbeat', () => {
     setPresence(io, userId, userName, 'online');
   });
 
-  // Explicit status update
   socket.on('presence:update', (data) => {
     setPresence(io, userId, userName, data.status || 'online');
   });
 
-  // On disconnect
   socket.on('disconnect', () => {
     setPresence(io, userId, userName, 'offline');
   });
 }
 
+/**
+ * Update user presence status in Redis and broadcast to all clients.
+ * Stores presence data with TTL for automatic cleanup.
+ */
 async function setPresence(io, userId, userName, status) {
   try {
     const redis = getRedis();
@@ -39,11 +70,15 @@ async function setPresence(io, userId, userName, status) {
     await User.findByIdAndUpdate(userId, { status });
     io.emit('presence:update', { userId, userName, status });
   } catch {
-    // Emit even if Redis fails
     io.emit('presence:update', { userId, userName, status });
   }
 }
 
+/**
+ * Start the background presence monitor.
+ * Periodically checks all presence keys and updates status based on last heartbeat.
+ * Only one monitor instance runs per process.
+ */
 function startPresenceMonitor(io) {
   if (monitorStarted) return;
   monitorStarted = true;
@@ -51,7 +86,7 @@ function startPresenceMonitor(io) {
   setInterval(async () => {
     try {
       const redis = getRedis();
-      const keys = await redis.keys('presence:*');
+      const keys = await scanPresenceKeys(redis);
       const now = Date.now();
 
       for (const key of keys) {
@@ -81,7 +116,7 @@ function startPresenceMonitor(io) {
 async function getOnlineUsers() {
   try {
     const redis = getRedis();
-    const keys = await redis.keys('presence:*');
+    const keys = await scanPresenceKeys(redis);
     const users = [];
     for (const key of keys) {
       const data = await redis.get(key);
@@ -96,3 +131,4 @@ async function getOnlineUsers() {
 }
 
 module.exports = { registerPresenceHandlers, getOnlineUsers };
+

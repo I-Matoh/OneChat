@@ -1,3 +1,11 @@
+/**
+ * Activity Model
+ * 
+ * Audit log for user actions across the application. Records who did what,
+ * when, and in which workspace. Useful for debugging, analytics, and
+ * activity feeds.
+ */
+
 const mongoose = require('mongoose');
 
 const activitySchema = new mongoose.Schema({

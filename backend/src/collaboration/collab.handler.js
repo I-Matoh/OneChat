@@ -1,11 +1,26 @@
+/**
+ * Collaboration Socket Handlers
+ * 
+ * WebSocket event handlers for real-time document collaboration.
+ * Handles document join/leave, real-time sync, cursor positions,
+ * and revision-based conflict resolution.
+ */
+
 const Document = require('../models/Document');
 const { createNotification } = require('../notifications/notification.service');
 const { mergeTextWithConflicts } = require('./merge.service');
 const { logActivity } = require('../activity/activity.service');
 
-// In-memory cursor positions per document
-const cursors = new Map(); // docId -> Map(userId -> { line, ch, userName })
+/**
+ * In-memory cursor positions per document.
+ * Maps: docId -> Map(userId -> { line, ch, userName })
+ */
+const cursors = new Map();
 
+/**
+ * Register all document collaboration event handlers on a socket.
+ * Handles: join, leave, update, sync-request, cursor updates.
+ */
 function registerCollabHandlers(io, socket) {
   // Join a document room
   socket.on('doc:join', async (docId) => {

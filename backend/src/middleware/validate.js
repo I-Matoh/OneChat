@@ -1,102 +1,118 @@
-function stringField(value, { min = 0, max = 10000 } = {}) {
-  if (typeof value !== 'string') return false;
-  const len = value.trim().length;
-  return len >= min && len <= max;
+const Joi = require('joi');
+const { AppError } = require('./errors');
+
+function validateBody(schema) {
+  return (req, res, next) => {
+    const { error, value } = schema.validate(req.body, {
+      abortEarly: false,
+      stripUnknown: true,
+      convert: true,
+    });
+    if (error) {
+      return next(new AppError('Validation failed', 400, 'VALIDATION_ERROR', {
+        fields: error.details.map((item) => ({
+          path: item.path.join('.'),
+          message: item.message,
+        })),
+      }));
+    }
+    req.body = value;
+    return next();
+  };
 }
 
-function validateAiAssistant(req, res, next) {
-  if (!stringField(req.body?.prompt, { min: 1, max: 20000 })) {
-    return res.status(400).json({ error: 'prompt must be a non-empty string' });
-  }
-  if (req.body?.contextType !== undefined && !stringField(req.body.contextType, { min: 1, max: 100 })) {
-    return res.status(400).json({ error: 'contextType must be a string' });
-  }
-  return next();
-}
+const roleSchema = Joi.string().valid('owner', 'admin', 'editor', 'commenter', 'viewer');
+const objectIdLike = Joi.string().trim().min(1).max(120);
 
-function validateWorkspaceCreate(req, res, next) {
-  if (!stringField(req.body?.name, { min: 1, max: 120 })) {
-    return res.status(400).json({ error: 'name must be a non-empty string' });
-  }
-  return next();
-}
+const validateAuthRegister = validateBody(Joi.object({
+  name: Joi.string().trim().min(1).max(120).required(),
+  email: Joi.string().trim().email().max(320).required(),
+  password: Joi.string().min(8).max(256).required(),
+}));
 
-function validatePageCreate(req, res, next) {
-  if (req.body?.title !== undefined && !stringField(req.body.title, { min: 1, max: 180 })) {
-    return res.status(400).json({ error: 'title must be a string' });
-  }
-  if (req.body?.content !== undefined && typeof req.body.content !== 'string') {
-    return res.status(400).json({ error: 'content must be a string' });
-  }
-  return next();
-}
+const validateAuthLogin = validateBody(Joi.object({
+  email: Joi.string().trim().email().max(320).required(),
+  password: Joi.string().min(1).max(256).required(),
+}));
 
-function validatePagePatch(req, res, next) {
-  if (req.body?.title !== undefined && !stringField(req.body.title, { min: 1, max: 180 })) {
-    return res.status(400).json({ error: 'title must be a string' });
-  }
-  if (req.body?.content !== undefined && typeof req.body.content !== 'string') {
-    return res.status(400).json({ error: 'content must be a string' });
-  }
-  if (req.body?.order !== undefined && typeof req.body.order !== 'number') {
-    return res.status(400).json({ error: 'order must be a number' });
-  }
-  return next();
-}
+const validateWorkspaceCreate = validateBody(Joi.object({
+  name: Joi.string().trim().min(1).max(120).required(),
+}));
 
-function validateWorkspaceMemberCreate(req, res, next) {
-  const role = req.body?.role;
-  if (typeof req.body?.userId !== 'string' || !req.body.userId.trim()) {
-    return res.status(400).json({ error: 'userId is required' });
-  }
-  if (role !== undefined && !['owner', 'admin', 'editor', 'commenter', 'viewer'].includes(role)) {
-    return res.status(400).json({ error: 'Invalid role' });
-  }
-  return next();
-}
+const validatePageCreate = validateBody(Joi.object({
+  title: Joi.string().trim().min(1).max(180).optional(),
+  content: Joi.string().max(200000).optional(),
+  parentId: objectIdLike.allow(null, '').optional(),
+}));
 
-function validateWorkspaceMemberPatch(req, res, next) {
-  const role = req.body?.role;
-  if (!['owner', 'admin', 'editor', 'commenter', 'viewer'].includes(role)) {
-    return res.status(400).json({ error: 'Invalid role' });
-  }
-  return next();
-}
+const validatePagePatch = validateBody(Joi.object({
+  title: Joi.string().trim().min(1).max(180).optional(),
+  content: Joi.string().max(200000).optional(),
+  icon: Joi.string().trim().max(60).optional(),
+  order: Joi.number().optional(),
+  parentId: objectIdLike.allow(null, '').optional(),
+}).min(1));
 
-function validateTaskCreate(req, res, next) {
-  if (typeof req.body?.workspaceId !== 'string' || !req.body.workspaceId.trim()) {
-    return res.status(400).json({ error: 'workspaceId is required' });
-  }
-  if (!stringField(req.body?.title, { min: 1, max: 220 })) {
-    return res.status(400).json({ error: 'title must be a non-empty string' });
-  }
-  if (req.body?.status !== undefined && !['todo', 'in_progress', 'done', 'blocked'].includes(req.body.status)) {
-    return res.status(400).json({ error: 'Invalid status' });
-  }
-  return next();
-}
+const validateWorkspaceMemberCreate = validateBody(Joi.object({
+  userId: objectIdLike.required(),
+  role: roleSchema.optional(),
+}));
 
-function validateTaskPatch(req, res, next) {
-  if (req.body?.title !== undefined && !stringField(req.body.title, { min: 1, max: 220 })) {
-    return res.status(400).json({ error: 'title must be a non-empty string' });
-  }
-  if (req.body?.status !== undefined && !['todo', 'in_progress', 'done', 'blocked'].includes(req.body.status)) {
-    return res.status(400).json({ error: 'Invalid status' });
-  }
-  return next();
-}
+const validateWorkspaceMemberPatch = validateBody(Joi.object({
+  role: roleSchema.required(),
+}));
 
-function validateAiExtractActions(req, res, next) {
-  if (!stringField(req.body?.workspaceId, { min: 1, max: 120 })) {
-    return res.status(400).json({ error: 'workspaceId is required' });
-  }
-  if (!stringField(req.body?.text, { min: 1, max: 50000 })) {
-    return res.status(400).json({ error: 'text is required' });
-  }
-  return next();
-}
+const validateTaskCreate = validateBody(Joi.object({
+  workspaceId: objectIdLike.required(),
+  title: Joi.string().trim().min(1).max(220).required(),
+  description: Joi.string().allow('').max(5000).optional(),
+  status: Joi.string().valid('todo', 'in_progress', 'done', 'blocked').optional(),
+  assigneeId: objectIdLike.allow(null, '').optional(),
+  dueDate: Joi.date().iso().allow(null).optional(),
+  sourceType: Joi.string().trim().max(80).optional(),
+  sourceId: Joi.string().trim().allow('').max(120).optional(),
+}));
+
+const validateTaskPatch = validateBody(Joi.object({
+  title: Joi.string().trim().min(1).max(220).optional(),
+  description: Joi.string().allow('').max(5000).optional(),
+  status: Joi.string().valid('todo', 'in_progress', 'done', 'blocked').optional(),
+  assigneeId: objectIdLike.allow(null, '').optional(),
+  dueDate: Joi.date().iso().allow(null).optional(),
+}).min(1));
+
+const validateAiAssistant = validateBody(Joi.object({
+  prompt: Joi.string().trim().min(1).max(20000).required(),
+  contextType: Joi.string().trim().min(1).max(100).optional(),
+}));
+
+const validateAiExtractActions = validateBody(Joi.object({
+  workspaceId: objectIdLike.required(),
+  text: Joi.string().trim().min(1).max(50000).required(),
+  createTasks: Joi.boolean().optional(),
+  sourceType: Joi.string().trim().max(80).optional(),
+  sourceId: Joi.string().trim().allow('').max(120).optional(),
+}));
+
+const validateConversationCreate = validateBody(Joi.object({
+  participantIds: Joi.array().items(objectIdLike).default([]),
+  name: Joi.string().trim().allow('').max(180).optional(),
+}));
+
+const validateDocCreate = validateBody(Joi.object({
+  title: Joi.string().trim().max(180).optional(),
+  content: Joi.string().max(200000).optional(),
+}));
+
+const validateDocPatch = validateBody(Joi.object({
+  title: Joi.string().trim().min(1).max(180).optional(),
+  content: Joi.string().max(200000).optional(),
+  revision: Joi.number().integer().min(0).optional(),
+}).min(1));
 
 module.exports = {
+  validateAuthRegister,
+  validateAuthLogin,
   validateAiAssistant,
   validateAiExtractActions,
   validateWorkspaceCreate,
@@ -106,4 +122,8 @@ module.exports = {
   validateWorkspaceMemberPatch,
   validateTaskCreate,
   validateTaskPatch,
+  validateConversationCreate,
+  validateDocCreate,
+  validateDocPatch,
 };
+

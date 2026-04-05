@@ -1,7 +1,25 @@
+/**
+ * AI Service
+ * 
+ * Provides text generation and action extraction capabilities.
+ * Uses Groq API as primary provider with local fallback for reliability.
+ * 
+ * Fallback processing includes:
+ *   - Sentence splitting and key point extraction
+ *   - Action item detection via pattern matching
+ *   - Keyword extraction using frequency analysis
+ */
+
+/**
+ * Normalize text input by trimming whitespace.
+ */
 function normalizeText(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+/**
+ * Split text into sentences for analysis.
+ */
 function splitSentences(text) {
   return text
     .replace(/\s+/g, ' ')
@@ -10,6 +28,9 @@ function splitSentences(text) {
     .filter(Boolean);
 }
 
+/**
+ * Extract top keywords from text, filtering common stop words.
+ */
 function topKeywords(text, limit = 6) {
   const stopWords = new Set([
     'the', 'and', 'for', 'that', 'with', 'this', 'from', 'have', 'will', 'your',
@@ -31,6 +52,10 @@ function topKeywords(text, limit = 6) {
     .map(([word]) => word);
 }
 
+/**
+ * Extract actionable items from text.
+ * Looks for bullet points, todo keywords, and action-oriented phrases.
+ */
 function extractActionItems(text) {
   const lines = text
     .split('\n')
@@ -45,6 +70,10 @@ function extractActionItems(text) {
   return actionLines.slice(0, 20).map((line) => line.replace(/^\s*[-*]\s+/, '').trim()).filter(Boolean);
 }
 
+/**
+ * Local fallback summarization when AI API unavailable.
+ * Extracts key sentences, action items, and keywords from content.
+ */
 function fallbackSummary(prompt, content, contextType = 'general') {
   const text = normalizeText(content);
   if (!text) return 'No context provided. Add chat or document content and try again.';
@@ -65,6 +94,10 @@ function fallbackSummary(prompt, content, contextType = 'general') {
   return sections.join('\n\n');
 }
 
+/**
+ * Call Groq Chat API for text generation.
+ * Returns null if API key missing or request fails.
+ */
 async function callGroqChat(prompt, { temperature = 0.2, maxTokens = 700 } = {}) {
   const apiKey = process.env.GROQ_API_KEY;
   const model = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';

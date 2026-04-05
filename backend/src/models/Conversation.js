@@ -1,3 +1,11 @@
+/**
+ * Conversation Model
+ * 
+ * Groups messages between participants. Represents a chat thread
+ * that can be 1:1 or group conversation. Stores last message preview
+ * for efficient list display.
+ */
+
 const mongoose = require('mongoose');
 
 const conversationSchema = new mongoose.Schema({

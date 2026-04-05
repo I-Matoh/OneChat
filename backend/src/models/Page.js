@@ -1,3 +1,11 @@
+/**
+ * Page Model
+ * 
+ * Represents pages within a workspace - hierarchical content units
+ * that can contain arbitrary text content. Supports tree structure
+ * via parentId field for organizing pages into folders.
+ */
+
 const mongoose = require('mongoose');
 
 const pageSchema = new mongoose.Schema({

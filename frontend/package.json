@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "eslint src --ext .js,.jsx",
+    "format": "prettier --check \"src/**/*.{js,jsx,css}\"",
+    "test": "node --test"
   },
   "dependencies": {
     "@react-three/drei": "^9.117.0",
@@ -25,7 +28,9 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.2",
     "autoprefixer": "^10.4.27",
+    "eslint": "^8.57.1",
     "postcss": "^8.5.8",
+    "prettier": "^3.3.3",
     "tailwindcss": "^4.2.2",
     "vite": "^6.4.1"
   }

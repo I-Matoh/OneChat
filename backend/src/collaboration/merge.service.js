@@ -1,3 +1,19 @@
+/**
+ * Text Merge Service with Conflict Detection
+ * 
+ * Three-way merge algorithm for collaborative text editing.
+ * Compares base, current, and incoming versions to detect conflicts.
+ * Returns merged content with conflict markers if needed.
+ */
+
+/**
+ * Merge text with conflict detection.
+ * 
+ * @param {string} baseText - Common ancestor version
+ * @param {string} currentText - Current server state
+ * @param {string} incomingText - Incoming client changes
+ * @returns {Object} { content, merged, conflict }
+ */
 function mergeTextWithConflicts(baseText, currentText, incomingText) {
   const base = typeof baseText === 'string' ? baseText : '';
   const current = typeof currentText === 'string' ? currentText : '';

@@ -1,3 +1,11 @@
+/**
+ * Task Model
+ * 
+ * Task items within a workspace. Supports status workflow (todo ->
+ * in_progress -> done -> blocked). Includes optional due dates,
+ * assignees, and source tracking for tasks created from AI or external sources.
+ */
+
 const mongoose = require('mongoose');
 
 const taskSchema = new mongoose.Schema({

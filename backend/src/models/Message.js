@@ -1,3 +1,11 @@
+/**
+ * Message Model
+ * 
+ * Chat messages within conversations. Each message belongs to
+ * a conversation and has sender, content, and delivery status.
+ * Status tracks the message lifecycle: sent -> delivered -> seen.
+ */
+
 const mongoose = require('mongoose');
 
 const messageSchema = new mongoose.Schema({
