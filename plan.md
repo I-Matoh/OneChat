@@ -27,7 +27,7 @@ High-impact gaps still open:
 
 Goal: make current features safe to scale and easy to iterate.
 
-Work:
+Work: 
 - Add standardized API error envelope and centralized error middleware.
 - Replace ad-hoc validators with schema validation (Zod or Joi) for all write routes.
 - Add `/ready` readiness endpoint (DB + Redis checks).

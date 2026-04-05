@@ -4,6 +4,7 @@
  * Creates activity log entries for user actions across the application.
  * Stores activity records and optionally broadcasts to connected clients.
  */
+const Activity = require('../models/Activity');
 
 /**
  * Log a user action to the activity feed.

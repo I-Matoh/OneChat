@@ -58,7 +58,7 @@ OneChat consolidates these into a single real-time workspace with built-in AI in
 - Create, assign, and track tasks
 - Status workflows (todo, in-progress, done)
 - Due dates and priority
-- Link tasks to pages or conversations
+- Link tasks to pages or conversations 
 
 ### 4.6 AI Assistant
 - Chat with AI for workspace queries

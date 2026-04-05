@@ -7,7 +7,7 @@ OneChat is a full-stack collaboration app with chat, live documents, workspace p
 https://one-chat-ten.vercel.app/
 
 ## Core Features
-
+ 
 - JWT auth (`/auth/register`, `/auth/login`, `/auth/me`)
 - Real-time chat with typing + message statuses
 - Collaborative docs with revision-aware realtime sync events

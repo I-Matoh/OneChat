@@ -14,5 +14,12 @@ module.exports = {
     },
   },
   rules: {},
+  overrides: [
+    {
+      files: ['**/*.jsx'],
+      rules: {
+        'no-unused-vars': 'off',
+      },
+    },
+  ],
 };
-

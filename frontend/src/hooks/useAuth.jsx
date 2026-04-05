@@ -5,6 +5,13 @@ const AuthContext = createContext(null);
 
 const API = import.meta.env.VITE_API_URL || '';
 
+function resolveApiErrorMessage(data, fallbackMessage) {
+  if (typeof data?.error === 'string' && data.error.trim()) return data.error;
+  if (typeof data?.error?.message === 'string' && data.error.message.trim()) return data.error.message;
+  if (typeof data?.message === 'string' && data.message.trim()) return data.message;
+  return fallbackMessage;
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
@@ -64,7 +71,7 @@ export function AuthProvider({ children }) {
       body: JSON.stringify({ email, password }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Login failed');
+    if (!res.ok) throw new Error(resolveApiErrorMessage(data, 'Login failed'));
     setUser(data.user);
     setToken(data.token);
     localStorage.setItem('onechat_auth', JSON.stringify(data));
@@ -78,7 +85,7 @@ export function AuthProvider({ children }) {
       body: JSON.stringify({ name, email, password }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Registration failed');
+    if (!res.ok) throw new Error(resolveApiErrorMessage(data, 'Registration failed'));
     setUser(data.user);
     setToken(data.token);
     localStorage.setItem('onechat_auth', JSON.stringify(data));

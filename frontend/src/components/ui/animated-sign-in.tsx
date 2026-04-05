@@ -286,7 +286,7 @@ const AnimatedSignIn: React.FC<AnimatedSignInProps> = ({ initialMode = "login" }
                   (!email || !password || !isEmailValid || (mode === "register" && !name.trim())))
               }
             >
-              {submitting ? "Working..." : mode === "login" ? "Sign In" : "Create Account"}
+              {submitting ? "Loading..." : mode === "login" ? "Sign In" : "Create Account"}
             </button>
 
             {error && <p className="error-message" style={{ marginTop: 12 }}>{error}</p>}
