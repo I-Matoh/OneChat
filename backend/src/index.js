@@ -1,5 +1,5 @@
 /**
- * LiveSync Backend - Main Entry Point
+ * OneChat Backend - Main Entry Point
  * 
  * Express server with Socket.IO for real-time collaboration.
  * Sets up middleware, routes, and WebSocket handlers.
@@ -157,7 +157,7 @@ const PORT = process.env.PORT || 5000;
  */
 connectDB().then(() => {
   server.listen(PORT, () => {
-    logger.info({ port: PORT }, 'LiveSync server running');
+    logger.info({ port: PORT }, 'OneChat server running');
   });
 });
 
