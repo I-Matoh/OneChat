@@ -17,9 +17,65 @@ export default function Editor({ activeDocId, setActiveDocId, documents, setDocu
   const [saveStatus, setSaveStatus] = useState('Saved');
   const [cursorPositions, setCursorPositions] = useState({});
   const [showAI, setShowAI] = useState(false);
+  const [syncMode, setSyncMode] = useState('legacy');
   const saveTimeout = useRef(null);
   const revisionRef = useRef(0);
   const baseContentRef = useRef('');
+  const sendingRef = useRef(false);
+  const desiredContentRef = useRef('');
+
+  function buildSingleTextOp(previousText, nextText) {
+    if (previousText === nextText) return null;
+
+    let prefix = 0;
+    while (
+      prefix < previousText.length
+      && prefix < nextText.length
+      && previousText[prefix] === nextText[prefix]
+    ) {
+      prefix += 1;
+    }
+
+    let previousSuffix = previousText.length - 1;
+    let nextSuffix = nextText.length - 1;
+    while (
+      previousSuffix >= prefix
+      && nextSuffix >= prefix
+      && previousText[previousSuffix] === nextText[nextSuffix]
+    ) {
+      previousSuffix -= 1;
+      nextSuffix -= 1;
+    }
+
+    return {
+      pos: prefix,
+      deleteCount: Math.max(0, previousSuffix - prefix + 1),
+      insertText: nextText.slice(prefix, nextSuffix + 1),
+    };
+  }
+
+  function sendPendingCrdtChange(nextTitle = title) {
+    if (!activeDocId || !token || sendingRef.current) return;
+    const op = buildSingleTextOp(baseContentRef.current, desiredContentRef.current);
+    if (!op) {
+      setSaveStatus('Saved');
+      return;
+    }
+
+    sendingRef.current = true;
+    const s = getSocket(token);
+    s.emit('doc:op', {
+      docId: activeDocId,
+      title: nextTitle,
+      baseVersion: revisionRef.current,
+      op: {
+        ...op,
+        clientOpId: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      },
+    });
+    setSaveStatus('Syncing...');
+    syncDocumentList(nextTitle);
+  }
 
   useEffect(() => {
     if (!activeDocId) return;
@@ -30,6 +86,9 @@ export default function Editor({ activeDocId, setActiveDocId, documents, setDocu
       setCollaborators(nextDoc.collaborators || []);
       revisionRef.current = nextDoc.revision || 0;
       baseContentRef.current = nextDoc.content || '';
+      desiredContentRef.current = nextDoc.content || '';
+      sendingRef.current = false;
+      setSyncMode(nextDoc.syncMode === 'crdt' ? 'crdt' : 'legacy');
     }).catch(() => {});
   }, [activeDocId, apiFetch]);
 
@@ -43,6 +102,7 @@ export default function Editor({ activeDocId, setActiveDocId, documents, setDocu
   }, [activeDocId, token]);
 
   useSocketEvent('doc:update', useCallback((data) => {
+    if (syncMode !== 'legacy') return;
     if (data.docId === activeDocId && data.editedBy !== user.id) {
       setTitle(data.title || '');
       setContent(data.content);
@@ -51,24 +111,64 @@ export default function Editor({ activeDocId, setActiveDocId, documents, setDocu
       setSaveStatus(data.conflict ? `Conflict merged from ${data.editorName}` : `Edited by ${data.editorName}`);
       setTimeout(() => setSaveStatus('Synced'), 2000);
     }
-  }, [activeDocId, user.id]));
+  }, [activeDocId, syncMode, user.id]));
 
   useSocketEvent('doc:sync', useCallback((data) => {
     if (data.docId !== activeDocId) return;
+    setSyncMode(data.syncMode === 'crdt' ? 'crdt' : 'legacy');
     setTitle(data.title || '');
-    setContent(data.content || '');
+    if (data.syncMode === 'crdt') {
+      baseContentRef.current = data.content || '';
+      desiredContentRef.current = data.content || '';
+      sendingRef.current = false;
+      setContent(data.content || '');
+      setSaveStatus('Synced');
+    } else {
+      setContent(data.content || '');
+      baseContentRef.current = data.content || '';
+      setSaveStatus('Synced');
+    }
     revisionRef.current = data.revision || 0;
-    baseContentRef.current = data.content || '';
-    setSaveStatus('Synced');
   }, [activeDocId]));
 
   useSocketEvent('doc:ack', useCallback((data) => {
     if (data.docId !== activeDocId) return;
+    if (data.syncMode === 'crdt') {
+      revisionRef.current = data.revision || revisionRef.current;
+      baseContentRef.current = data.content || '';
+      sendingRef.current = false;
+      const desired = desiredContentRef.current;
+      if (desired !== baseContentRef.current) {
+        setContent(desired);
+        sendPendingCrdtChange(data.title || title);
+        return;
+      }
+      setContent(data.content || '');
+      setSaveStatus('Saved');
+      return;
+    }
     revisionRef.current = data.revision || revisionRef.current;
     baseContentRef.current = data.content || '';
     setContent(data.content || '');
     setSaveStatus(data.conflict ? 'Merged with conflicts' : 'Saved');
-  }, [activeDocId]));
+  }, [activeDocId, title]));
+
+  useSocketEvent('doc:remote-op', useCallback((data) => {
+    if (data.docId !== activeDocId || data.editedBy === user.id) return;
+    const previousBase = baseContentRef.current;
+    const desired = desiredContentRef.current;
+    setTitle(data.title || '');
+    revisionRef.current = data.revision || revisionRef.current;
+    baseContentRef.current = data.content || '';
+    if (desired === previousBase || !desired) {
+      desiredContentRef.current = data.content || '';
+      setContent(data.content || '');
+    }
+    setSaveStatus(`Synced from ${data.editorName}`);
+    if (!sendingRef.current && desiredContentRef.current !== baseContentRef.current) {
+      sendPendingCrdtChange(data.title || title);
+    }
+  }, [activeDocId, title, user.id]));
 
   useSocketEvent('doc:cursor', useCallback((data) => {
     if (data.userId !== user.id) {
@@ -106,6 +206,23 @@ export default function Editor({ activeDocId, setActiveDocId, documents, setDocu
     setContent(val);
     setSaveStatus('Editing...');
 
+    if (syncMode === 'crdt') {
+      desiredContentRef.current = val;
+      if (saveTimeout.current) clearTimeout(saveTimeout.current);
+      saveTimeout.current = setTimeout(() => {
+        sendPendingCrdtChange();
+      }, 120);
+
+      const s = getSocket(token);
+      const lines = val.substring(0, e.target.selectionStart).split('\n');
+      s.emit('doc:cursor', {
+        docId: activeDocId,
+        line: lines.length,
+        ch: lines[lines.length - 1].length,
+      });
+      return;
+    }
+
     if (saveTimeout.current) clearTimeout(saveTimeout.current);
     saveTimeout.current = setTimeout(() => {
       const s = getSocket(token);
@@ -137,6 +254,7 @@ export default function Editor({ activeDocId, setActiveDocId, documents, setDocu
       });
       setDoc(updated);
       syncDocumentList(updated.title, updated.updatedAt);
+      setSyncMode(updated.syncMode === 'crdt' ? 'crdt' : 'legacy');
     } catch {
       setSaveStatus('Unable to save title');
     }
@@ -268,7 +386,7 @@ export default function Editor({ activeDocId, setActiveDocId, documents, setDocu
         <div className="collab-footer">
           <div className="collab-status">
             <span className="collab-status-dot" />
-            <span>{saveStatus}</span>
+            <span>{saveStatus} · {syncMode.toUpperCase()}</span>
           </div>
           <div className="collab-collab-count">
             {Object.keys(cursorPositions).length} collaborator(s) editing

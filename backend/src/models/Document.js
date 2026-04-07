@@ -12,6 +12,11 @@ const documentSchema = new mongoose.Schema({
   title:         { type: String, required: true, default: 'Untitled' },
   content:       { type: String, default: '' },
   revision:      { type: Number, default: 0 },
+  syncMode:      { type: String, enum: ['legacy', 'crdt'], default: 'legacy', index: true },
+  crdtState: {
+    version: { type: Number, default: 0 },
+    content: { type: String, default: '' },
+  },
   collaborators: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   versions: [{
     content:   String,

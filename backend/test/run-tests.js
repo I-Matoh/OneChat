@@ -504,16 +504,37 @@ async function runRealtimeChecks() {
     Message.create = async () => ({ _id: 'msg-1', createdAt: '2026-04-07T10:04:00.000Z' });
     Message.findByIdAndUpdate = async () => ({ acknowledged: true });
     Message.updateMany = async () => ({ acknowledged: true });
-    Document.findOne = async ({ _id }) => (_id === 'doc-1'
-      ? {
+    const docs = {
+      'doc-1': {
         _id: 'doc-1',
         title: 'Spec',
         content: 'Original content',
         revision: 0,
+        syncMode: 'legacy',
         collaborators: ['user-1', 'user-2'],
-      }
-      : null);
-    Document.findByIdAndUpdate = async () => ({ acknowledged: true });
+      },
+      'doc-2': {
+        _id: 'doc-2',
+        title: 'CRDT Spec',
+        content: 'Hello',
+        revision: 0,
+        syncMode: 'crdt',
+        crdtState: { version: 0, content: 'Hello' },
+        collaborators: ['user-1', 'user-2'],
+      },
+    };
+    Document.findOne = async ({ _id }) => (docs[_id] ? { ...docs[_id] } : null);
+    Document.findByIdAndUpdate = async (docId, update) => {
+      const next = docs[docId];
+      if (!next) return null;
+      next.title = update.title ?? next.title;
+      next.content = update.content ?? next.content;
+      next.revision = update.revision ?? next.revision;
+      next.updatedAt = update.updatedAt ?? next.updatedAt;
+      if (update['crdtState.content'] !== undefined) next.crdtState = { ...(next.crdtState || {}), content: update['crdtState.content'] };
+      if (update['crdtState.version'] !== undefined) next.crdtState = { ...(next.crdtState || {}), version: update['crdtState.version'] };
+      return { acknowledged: true };
+    };
 
     const notificationPath = require.resolve('../src/notifications/notification.service');
     const activityPath = require.resolve('../src/activity/activity.service');
@@ -558,8 +579,11 @@ async function runRealtimeChecks() {
       alice.emit('message:send', { conversationId: 'conv-1', content: 'Hi @Grace' });
       assert.equal((await statusPromise).status, 'seen');
 
+      const legacySyncPromise = waitForEvent(alice, 'doc:sync');
       alice.emit('doc:join', 'doc-1');
-      assert.equal((await waitForEvent(alice, 'doc:sync')).revision, 0);
+      const legacySync = await legacySyncPromise;
+      assert.equal(legacySync.revision, 0);
+      assert.equal(legacySync.syncMode, 'legacy');
 
       const ackPromise = waitForEvent(alice, 'doc:ack');
       alice.emit('doc:update', {
@@ -572,6 +596,38 @@ async function runRealtimeChecks() {
       const ack = await ackPromise;
       assert.equal(ack.revision, 1);
       assert.equal(ack.content, 'Updated content');
+      assert.equal(ack.syncMode, undefined);
+
+      const aliceCrdtSyncPromise = waitForEvent(alice, 'doc:sync');
+      const bobCrdtSyncPromise = waitForEvent(bob, 'doc:sync');
+      alice.emit('doc:join', 'doc-2');
+      bob.emit('doc:join', 'doc-2');
+      const aliceCrdtSync = await aliceCrdtSyncPromise;
+      const bobCrdtSync = await bobCrdtSyncPromise;
+      assert.equal(aliceCrdtSync.syncMode, 'crdt');
+      assert.equal(bobCrdtSync.syncMode, 'crdt');
+      assert.equal(aliceCrdtSync.content, 'Hello');
+
+      const aliceAckPromise = waitForEvent(alice, 'doc:ack');
+      const bobAckPromise = waitForEvent(bob, 'doc:ack');
+      alice.emit('doc:op', {
+        docId: 'doc-2',
+        baseVersion: 0,
+        op: { pos: 5, deleteCount: 0, insertText: ' Ada' },
+      });
+      bob.emit('doc:op', {
+        docId: 'doc-2',
+        baseVersion: 0,
+        op: { pos: 5, deleteCount: 0, insertText: ' Grace' },
+      });
+
+      const [aliceAck, bobAck] = await Promise.all([aliceAckPromise, bobAckPromise]);
+      assert.equal(aliceAck.syncMode, 'crdt');
+      assert.equal(bobAck.syncMode, 'crdt');
+      assert.match(docs['doc-2'].content, /Ada/);
+      assert.match(docs['doc-2'].content, /Grace/);
+      assert.doesNotMatch(docs['doc-2'].content, /<<<<<<<|>>>>>>>|=======/);
+      assert.equal(docs['doc-2'].crdtState.version, 2);
     } finally {
       alice.disconnect();
       bob.disconnect();

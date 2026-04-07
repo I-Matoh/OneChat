@@ -14,6 +14,7 @@ const { AppError, asyncHandler } = require('../middleware/errors');
 const { validateDocCreate, validateDocPatch } = require('../middleware/validate');
 
 const router = Router();
+const DEFAULT_SYNC_MODE = process.env.DOC_SYNC_MODE === 'legacy' ? 'legacy' : 'crdt';
 
 /**
  * GET /docs
@@ -21,7 +22,7 @@ const router = Router();
  */
 router.get('/', authMiddleware, asyncHandler(async (req, res) => {
   const docs = await Document.find({ collaborators: req.user.id })
-    .select('title updatedAt collaborators revision')
+    .select('title updatedAt collaborators revision syncMode crdtState.version')
     .sort({ updatedAt: -1 });
   res.json(docs);
 }));
@@ -36,6 +37,11 @@ router.post('/', authMiddleware, validateDocCreate, asyncHandler(async (req, res
     title: title || 'Untitled',
     content: content || '',
     revision: 0,
+    syncMode: DEFAULT_SYNC_MODE,
+    crdtState: {
+      version: 0,
+      content: content || '',
+    },
     collaborators: [req.user.id],
   });
   await logActivity(getGlobalIo(), {
@@ -63,7 +69,12 @@ router.get('/:id', authMiddleware, asyncHandler(async (req, res) => {
     message: `Updated document "${doc.title}"`,
     meta: { docId: doc._id.toString() },
   });
-  res.json(doc);
+  const payload = doc.toObject();
+  if (payload.syncMode === 'crdt') {
+    payload.content = payload.crdtState?.content || payload.content || '';
+    payload.revision = payload.crdtState?.version || payload.revision || 0;
+  }
+  res.json(payload);
 }));
 
 /**
@@ -75,6 +86,12 @@ router.patch('/:id', authMiddleware, validateDocPatch, asyncHandler(async (req, 
   if (typeof req.body.title === 'string') updates.title = req.body.title.trim() || 'Untitled';
   if (typeof req.body.content === 'string') updates.content = req.body.content;
   if (typeof req.body.revision === 'number') updates.revision = req.body.revision;
+  if (typeof req.body.content === 'string') {
+    updates['crdtState.content'] = req.body.content;
+  }
+  if (typeof req.body.revision === 'number') {
+    updates['crdtState.version'] = req.body.revision;
+  }
 
   const doc = await Document.findOneAndUpdate(
     { _id: req.params.id, collaborators: req.user.id },
@@ -83,7 +100,12 @@ router.patch('/:id', authMiddleware, validateDocPatch, asyncHandler(async (req, 
   ).populate('collaborators', 'name email status');
 
   if (!doc) throw new AppError('Document not found', 404, 'DOCUMENT_NOT_FOUND');
-  res.json(doc);
+  const payload = doc.toObject();
+  if (payload.syncMode === 'crdt') {
+    payload.content = payload.crdtState?.content || payload.content || '';
+    payload.revision = payload.crdtState?.version || payload.revision || 0;
+  }
+  res.json(payload);
 }));
 
 module.exports = router;

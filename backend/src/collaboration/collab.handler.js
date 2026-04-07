@@ -10,6 +10,7 @@ const Document = require('../models/Document');
 const { createNotification } = require('../notifications/notification.service');
 const { mergeTextWithConflicts } = require('./merge.service');
 const { logActivity } = require('../activity/activity.service');
+const { applyCrdtOperation, loadCrdtState } = require('./crdt.service');
 
 /**
  * In-memory cursor positions per document.
@@ -31,11 +32,14 @@ function registerCollabHandlers(io, socket) {
     }
 
     socket.join(`doc:${docId}`);
+    const syncMode = doc.syncMode === 'crdt' ? 'crdt' : 'legacy';
+    const crdtState = syncMode === 'crdt' ? loadCrdtState(docId, doc) : null;
     socket.emit('doc:sync', {
       docId,
       title: doc.title,
-      content: doc.content || '',
-      revision: doc.revision || 0,
+      content: syncMode === 'crdt' ? crdtState.content : (doc.content || ''),
+      revision: syncMode === 'crdt' ? crdtState.version : (doc.revision || 0),
+      syncMode,
     });
 
     // Send current cursors
@@ -68,6 +72,10 @@ function registerCollabHandlers(io, socket) {
       const doc = await Document.findOne({ _id: docId, collaborators: socket.user.id });
       if (!doc) {
         socket.emit('error', { message: 'Document not found' });
+        return;
+      }
+      if (doc.syncMode === 'crdt') {
+        socket.emit('error', { message: 'Legacy sync disabled for this document' });
         return;
       }
 
@@ -146,6 +154,83 @@ function registerCollabHandlers(io, socket) {
     }
   });
 
+  socket.on('doc:op', async (data) => {
+    try {
+      const { docId, op, baseVersion = 0, title } = data || {};
+      const doc = await Document.findOne({ _id: docId, collaborators: socket.user.id });
+      if (!doc) {
+        socket.emit('error', { message: 'Document not found' });
+        return;
+      }
+      if (doc.syncMode !== 'crdt') {
+        socket.emit('error', { message: 'CRDT sync not enabled for this document' });
+        return;
+      }
+
+      const nextTitle = typeof title === 'string' ? title.trim() || doc.title : doc.title;
+      const result = applyCrdtOperation(docId, doc, {
+        ...op,
+        clientId: socket.id,
+      }, baseVersion);
+
+      await Document.findByIdAndUpdate(docId, {
+        title: nextTitle,
+        content: result.content,
+        revision: result.version,
+        'crdtState.content': result.content,
+        'crdtState.version': result.version,
+        updatedAt: Date.now(),
+        $push: {
+          versions: {
+            content: result.content,
+            editedBy: socket.user.id,
+            revision: result.version,
+            timestamp: Date.now(),
+          },
+        },
+      });
+
+      socket.emit('doc:ack', {
+        docId,
+        title: nextTitle,
+        content: result.content,
+        revision: result.version,
+        syncMode: 'crdt',
+        clientOpId: op?.clientOpId || '',
+      });
+
+      socket.to(`doc:${docId}`).emit('doc:remote-op', {
+        docId,
+        title: nextTitle,
+        content: result.content,
+        revision: result.version,
+        syncMode: 'crdt',
+        editedBy: socket.user.id,
+        editorName: socket.user.name,
+      });
+
+      await logActivity(io, {
+        actorId: socket.user.id,
+        type: 'document_realtime_updated',
+        message: `Edited document "${nextTitle}"`,
+        meta: { docId, revision: result.version, syncMode: 'crdt' },
+      });
+
+      const others = doc.collaborators.filter((c) => c.toString() !== socket.user.id);
+      for (const userId of others) {
+        await createNotification(
+          io,
+          userId.toString(),
+          'doc_edit',
+          `${socket.user.name} edited "${nextTitle}"`,
+          { docId, syncMode: 'crdt' }
+        );
+      }
+    } catch (err) {
+      socket.emit('error', { message: err.message });
+    }
+  });
+
   socket.on('doc:sync-request', async (docId) => {
     try {
       const doc = await Document.findOne({ _id: docId, collaborators: socket.user.id });
@@ -153,8 +238,13 @@ function registerCollabHandlers(io, socket) {
       socket.emit('doc:sync', {
         docId,
         title: doc.title,
-        content: doc.content || '',
-        revision: doc.revision || 0,
+        content: doc.syncMode === 'crdt'
+          ? loadCrdtState(docId, doc).content
+          : (doc.content || ''),
+        revision: doc.syncMode === 'crdt'
+          ? loadCrdtState(docId, doc).version
+          : (doc.revision || 0),
+        syncMode: doc.syncMode === 'crdt' ? 'crdt' : 'legacy',
       });
     } catch {
       // no-op
