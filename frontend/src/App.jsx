@@ -77,7 +77,7 @@ const EMPTY_SEARCH_RESULTS = {
   conversations: [],
 };
 
-function AppShell() {
+export function AppShell() {
   const { user, token, loading, logout } = useAuth();
   const { connected } = useSocket(token);
   const { apiFetch } = useApi();

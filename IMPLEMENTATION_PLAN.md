@@ -201,7 +201,7 @@ Success criteria:
 - Connected App sidebar spaces to real workspace APIs (`frontend/src/App.jsx`)
 - Added unified authenticated search endpoint (`GET /search?q=`) across conversations, documents, workspaces, and pages
 - Added role-based workspace authorization checks (viewer/commenter/editor/admin/owner) for page and member operations
-- Added workspace member management APIs:
+- Added workspace member management APIs: 
   - `GET /workspaces/:workspaceId/members`
   - `POST /workspaces/:workspaceId/members`
   - `PATCH /workspaces/:workspaceId/members/:memberUserId`

@@ -255,7 +255,7 @@ OneChat v1.0 provides a functional MVP with:
 1. Database tables with views
 2. Linked pages with backlinks
 3. Templates system
-
+ 
 ### Phase 4: AI Enhancement
 1. Streaming AI responses
 2. Expand/rewrite/summarize

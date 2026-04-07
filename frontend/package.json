@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "lint": "eslint src --ext .js,.jsx",
     "format": "prettier --check \"src/**/*.{js,jsx,css}\"",
-    "test": "node --test"
+    "test": "vitest run"
   },
   "dependencies": {
     "@react-three/drei": "^9.117.0",
@@ -24,14 +24,18 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.2",
     "autoprefixer": "^10.4.27",
     "eslint": "^8.57.1",
+    "jsdom": "^26.1.0",
     "postcss": "^8.5.8",
     "prettier": "^3.3.3",
     "tailwindcss": "^4.2.2",
-    "vite": "^6.4.1"
+    "vite": "^6.4.1",
+    "vitest": "^4.1.3"
   }
 }
