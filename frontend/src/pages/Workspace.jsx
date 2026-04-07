@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useApi } from '../hooks/useApi';
+import PageBlockEditor from '../components/PageBlockEditor';
 
 const FolderIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -23,6 +24,7 @@ export default function Workspace() {
   const [error, setError] = useState('');
 
   const [tasks, setTasks] = useState([]);
+  const [documents, setDocuments] = useState([]);
   const [taskTitle, setTaskTitle] = useState('');
   const [extracting, setExtracting] = useState(false);
   const [extractInfo, setExtractInfo] = useState('');
@@ -59,9 +61,13 @@ export default function Workspace() {
     let cancelled = false;
     async function loadUsers() {
       try {
-        const list = await apiFetch('/users');
+        const [list, docs] = await Promise.all([
+          apiFetch('/users'),
+          apiFetch('/docs').catch(() => []),
+        ]);
         if (cancelled) return;
         setUsers(list || []);
+        setDocuments(docs || []);
       } catch {
         // optional UI
       }
@@ -140,23 +146,26 @@ export default function Workspace() {
     }
   }
 
-  async function savePage(content) {
-    if (!activePageId) return;
+  async function savePage(nextPage = activePage) {
+    if (!activePageId || !nextPage) return null;
     setSaveState('Saving...');
     try {
       const updated = await apiFetch(`/workspaces/pages/${activePageId}`, {
         method: 'PATCH',
         body: JSON.stringify({
-          title: activePage?.title || 'Untitled Page',
-          content,
+          title: nextPage.title || 'Untitled Page',
+          content: nextPage.content || '',
+          blocks: nextPage.blocks || [],
         }),
       });
       setPages((prev) => prev.map((item) => (item._id === updated._id ? updated : item)));
       setSaveState('Saved');
       setError('');
+      return updated;
     } catch (err) {
       setSaveState('Save failed');
       setError(err.message || 'Unable to save page');
+      return null;
     }
   }
 
@@ -260,6 +269,54 @@ export default function Workspace() {
     }
   }
 
+  async function createCommentThread(payload) {
+    if (!activePageId) return null;
+    try {
+      const updated = await apiFetch(`/workspaces/pages/${activePageId}/comments`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      setPages((prev) => prev.map((item) => (item._id === updated._id ? updated : item)));
+      setError('');
+      return updated;
+    } catch (err) {
+      setError(err.message || 'Unable to create comment thread');
+      return null;
+    }
+  }
+
+  async function replyToCommentThread({ threadId, message }) {
+    if (!activePageId) return null;
+    try {
+      const updated = await apiFetch(`/workspaces/pages/${activePageId}/comments/${threadId}/replies`, {
+        method: 'POST',
+        body: JSON.stringify({ message }),
+      });
+      setPages((prev) => prev.map((item) => (item._id === updated._id ? updated : item)));
+      setError('');
+      return updated;
+    } catch (err) {
+      setError(err.message || 'Unable to reply to thread');
+      return null;
+    }
+  }
+
+  async function toggleCommentThread({ threadId, resolved }) {
+    if (!activePageId) return null;
+    try {
+      const updated = await apiFetch(`/workspaces/pages/${activePageId}/comments/${threadId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ resolved }),
+      });
+      setPages((prev) => prev.map((item) => (item._id === updated._id ? updated : item)));
+      setError('');
+      return updated;
+    } catch (err) {
+      setError(err.message || 'Unable to update thread');
+      return null;
+    }
+  }
+
   return (
     <div className="workspace-layout">
       <aside className="workspace-sidebar">
@@ -354,52 +411,26 @@ export default function Workspace() {
           </div>
 
           <div className="workspace-table" style={{ display: 'block', padding: 12 }}>
-            {activePage ? (
-              <>
-                <input
-                  className="input"
-                  value={activePage.title || ''}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setPages((prev) => prev.map((item) => (
-                      item._id === activePage._id ? { ...item, title: value } : item
-                    )));
-                  }}
-                  onBlur={() => savePage(activePage.content || '')}
-                  placeholder="Page title"
-                />
-                <textarea
-                  className="chat-input"
-                  style={{ minHeight: 380, width: '100%', border: '1px solid var(--color-border)', borderRadius: 12, marginTop: 12, padding: 12 }}
-                  value={activePage.content || ''}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setSaveState('Editing...');
-                    setPages((prev) => prev.map((item) => (
-                      item._id === activePage._id ? { ...item, content: value } : item
-                    )));
-                  }}
-                  onBlur={(e) => savePage(e.target.value)}
-                  placeholder="Write your notes here..."
-                />
-                <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
-                  <button className="btn btn-secondary" onClick={() => savePage(activePage.content || '')}>
-                    Save Page
-                  </button>
-                  <button className="btn btn-primary" onClick={extractTasksFromPage} disabled={extracting}>
-                    {extracting ? 'Extracting...' : 'Extract Tasks'}
-                  </button>
-                </div>
-                {extractInfo && (
-                  <div style={{ marginTop: 8, color: 'var(--color-muted)', fontSize: 12 }}>{extractInfo}</div>
-                )}
-              </>
-            ) : (
-              <div className="empty-state">
-                <div className="empty-title">Select a page</div>
-                <div className="empty-hint">Create or choose a page to start writing</div>
-              </div>
-            )}
+            <PageBlockEditor
+              page={activePage}
+              pages={pages}
+              documents={documents}
+              members={members}
+              saveState={saveState}
+              extracting={extracting}
+              extractInfo={extractInfo}
+              onPageChange={(nextPage) => {
+                setSaveState('Editing...');
+                setPages((prev) => prev.map((item) => (
+                  item._id === nextPage._id ? { ...item, ...nextPage } : item
+                )));
+              }}
+              onSave={savePage}
+              onExtractTasks={extractTasksFromPage}
+              onCreateThread={createCommentThread}
+              onReplyThread={replyToCommentThread}
+              onResolveThread={toggleCommentThread}
+            />
           </div>
 
           <div style={{ display: 'grid', gap: 12 }}>

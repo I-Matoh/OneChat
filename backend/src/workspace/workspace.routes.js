@@ -19,6 +19,7 @@ const Page = require('../models/Page');
 const User = require('../models/User');
 const { getGlobalIo } = require('../websocket/socketServer');
 const { logActivity } = require('../activity/activity.service');
+const { createNotification } = require('../notifications/notification.service');
 const {
   normalizeId,
   hasRole,
@@ -27,8 +28,34 @@ const {
   getWorkspaceForUser,
 } = require('./workspace.access');
 const { AppError, asyncHandler } = require('../middleware/errors');
+const {
+  normalizeBlocks,
+  blocksToPlainText,
+  normalizeThread,
+  normalizeReply,
+  collectUserMentionIds,
+} = require('./page.editor');
 
 const router = Router();
+
+function serializePage(page) {
+  const source = typeof page?.toObject === 'function' ? page.toObject() : page;
+  const blocks = normalizeBlocks(page.blocks, page.content);
+  return {
+    ...source,
+    blocks,
+    content: typeof page.content === 'string' && page.content.trim()
+      ? page.content
+      : blocksToPlainText(blocks),
+    commentThreads: Array.isArray(page.commentThreads) ? page.commentThreads : [],
+  };
+}
+
+function getNewMentionedUserIds(previousBlocks, nextBlocks, actorId) {
+  const previousIds = collectUserMentionIds(previousBlocks);
+  const nextIds = collectUserMentionIds(nextBlocks);
+  return [...nextIds].filter((userId) => !previousIds.has(userId) && normalizeId(userId) !== normalizeId(actorId));
+}
 
 /**
  * GET /workspaces
@@ -73,7 +100,7 @@ router.get('/:workspaceId/pages', authMiddleware, asyncHandler(async (req, res) 
 
   const pages = await Page.find({ workspaceId: workspace._id })
     .sort({ parentId: 1, order: 1, updatedAt: -1 });
-  res.json(pages);
+  res.json(pages.map(serializePage));
 }));
 
 router.post('/:workspaceId/pages', authMiddleware, validatePageCreate, asyncHandler(async (req, res) => {
@@ -85,7 +112,10 @@ router.post('/:workspaceId/pages', authMiddleware, validatePageCreate, asyncHand
 
   const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
   const parentId = req.body?.parentId || null;
-  const content = typeof req.body?.content === 'string' ? req.body.content : '';
+  const blocks = normalizeBlocks(req.body?.blocks, req.body?.content || '');
+  const content = typeof req.body?.content === 'string' && req.body.content.trim()
+    ? req.body.content
+    : blocksToPlainText(blocks);
 
   const lastPage = await Page.findOne({
     workspaceId: workspace._id,
@@ -97,6 +127,7 @@ router.post('/:workspaceId/pages', authMiddleware, validatePageCreate, asyncHand
     parentId: parentId || null,
     title: title || 'Untitled',
     content,
+    blocks,
     order: (lastPage?.order || 0) + 1,
     createdBy: req.user.id,
     updatedBy: req.user.id,
@@ -110,7 +141,7 @@ router.post('/:workspaceId/pages', authMiddleware, validatePageCreate, asyncHand
     meta: { pageId: page._id.toString() },
   });
 
-  res.status(201).json(page);
+  res.status(201).json(serializePage(page));
 }));
 
 router.patch('/pages/:pageId', authMiddleware, validatePagePatch, asyncHandler(async (req, res) => {
@@ -125,12 +156,30 @@ router.patch('/pages/:pageId', authMiddleware, validatePagePatch, asyncHandler(a
 
   const updates = { updatedBy: req.user.id };
   if (typeof req.body?.title === 'string') updates.title = req.body.title.trim() || 'Untitled';
-  if (typeof req.body?.content === 'string') updates.content = req.body.content;
   if (typeof req.body?.icon === 'string') updates.icon = req.body.icon;
   if (typeof req.body?.order === 'number') updates.order = req.body.order;
   if (req.body?.parentId !== undefined) updates.parentId = req.body.parentId || null;
+  if (req.body?.blocks !== undefined) {
+    updates.blocks = normalizeBlocks(req.body.blocks, req.body.content || page.content || '');
+    updates.content = typeof req.body?.content === 'string' && req.body.content.trim()
+      ? req.body.content
+      : blocksToPlainText(updates.blocks);
+  } else if (typeof req.body?.content === 'string') {
+    updates.content = req.body.content;
+    updates.blocks = normalizeBlocks(page.blocks, req.body.content);
+  }
 
   const updated = await Page.findByIdAndUpdate(page._id, { $set: updates }, { new: true });
+  const newMentionedUserIds = getNewMentionedUserIds(page.blocks || [], updates.blocks || page.blocks || [], req.user.id);
+
+  await Promise.all(newMentionedUserIds.map((userId) => createNotification(
+    getGlobalIo(),
+    userId,
+    'mention',
+    `${req.user.name} mentioned you in page "${updated.title}"`,
+    { pageId: normalizeId(updated._id), workspaceId: normalizeId(updated.workspaceId), type: 'page' }
+  )));
+
   await logActivity(getGlobalIo(), {
     actorId: req.user.id,
     workspaceId: page.workspaceId,
@@ -138,7 +187,7 @@ router.patch('/pages/:pageId', authMiddleware, validatePagePatch, asyncHandler(a
     message: `Updated page "${updated.title}"`,
     meta: { pageId: updated._id.toString() },
   });
-  res.json(updated);
+  res.json(serializePage(updated));
 }));
 
 router.delete('/pages/:pageId', authMiddleware, asyncHandler(async (req, res) => {
@@ -167,6 +216,114 @@ router.delete('/pages/:pageId', authMiddleware, asyncHandler(async (req, res) =>
   });
 
   res.json({ success: true, pageId: normalizeId(page._id) });
+}));
+
+router.post('/pages/:pageId/comments', authMiddleware, asyncHandler(async (req, res) => {
+  const page = await Page.findById(req.params.pageId);
+  if (!page) throw new AppError('Page not found', 404, 'PAGE_NOT_FOUND');
+
+  const workspace = await getWorkspaceForUser(page.workspaceId, req.user.id);
+  if (!workspace) throw new AppError('Access denied', 403, 'ACCESS_DENIED');
+  if (!hasRole(workspace, req.user.id, 'commenter')) {
+    throw new AppError('Insufficient role for comments', 403, 'INSUFFICIENT_ROLE');
+  }
+
+  const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
+  const blockId = typeof req.body?.blockId === 'string' ? req.body.blockId.trim() : '';
+  if (!message || !blockId) {
+    throw new AppError('Comment message and blockId are required', 400, 'VALIDATION_ERROR');
+  }
+
+  const thread = normalizeThread({
+    blockId,
+    selectedText: req.body?.selectedText,
+    createdBy: req.user.id,
+    replies: [{ userId: req.user.id, message }],
+  });
+
+  const existingThreads = Array.isArray(page.commentThreads) ? page.commentThreads : [];
+  const updated = await Page.findByIdAndUpdate(page._id, {
+    $set: { commentThreads: [...existingThreads, thread], updatedBy: req.user.id },
+  }, { new: true });
+
+  const mentionUserIds = Array.isArray(req.body?.mentionedUserIds)
+    ? req.body.mentionedUserIds.filter((userId) => normalizeId(userId) !== normalizeId(req.user.id))
+    : [];
+  await Promise.all(mentionUserIds.map((userId) => createNotification(
+    getGlobalIo(),
+    userId,
+    'mention',
+    `${req.user.name} mentioned you in a page comment`,
+    { pageId: normalizeId(page._id), workspaceId: normalizeId(page.workspaceId), threadId: thread.id, type: 'page_comment' }
+  )));
+
+  res.status(201).json(serializePage(updated));
+}));
+
+router.post('/pages/:pageId/comments/:threadId/replies', authMiddleware, asyncHandler(async (req, res) => {
+  const page = await Page.findById(req.params.pageId);
+  if (!page) throw new AppError('Page not found', 404, 'PAGE_NOT_FOUND');
+
+  const workspace = await getWorkspaceForUser(page.workspaceId, req.user.id);
+  if (!workspace) throw new AppError('Access denied', 403, 'ACCESS_DENIED');
+  if (!hasRole(workspace, req.user.id, 'commenter')) {
+    throw new AppError('Insufficient role for comments', 403, 'INSUFFICIENT_ROLE');
+  }
+
+  const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
+  if (!message) throw new AppError('Reply message is required', 400, 'VALIDATION_ERROR');
+
+  const threads = Array.isArray(page.commentThreads) ? page.commentThreads.map((thread) => normalizeThread(thread)) : [];
+  const index = threads.findIndex((thread) => thread.id === req.params.threadId);
+  if (index < 0) throw new AppError('Thread not found', 404, 'THREAD_NOT_FOUND');
+
+  threads[index].replies = [...threads[index].replies, normalizeReply({ userId: req.user.id, message })];
+  threads[index].resolved = false;
+
+  const updated = await Page.findByIdAndUpdate(page._id, {
+    $set: { commentThreads: threads, updatedBy: req.user.id },
+  }, { new: true });
+
+  const recipients = new Set((threads[index].replies || []).map((reply) => normalizeId(reply.userId)));
+  recipients.add(normalizeId(threads[index].createdBy));
+  recipients.delete(normalizeId(req.user.id));
+
+  await Promise.all([...recipients].map((userId) => createNotification(
+    getGlobalIo(),
+    userId,
+    'mention',
+    `${req.user.name} replied in a page comment thread`,
+    { pageId: normalizeId(page._id), workspaceId: normalizeId(page.workspaceId), threadId: threads[index].id, type: 'page_comment_reply' }
+  )));
+
+  res.status(201).json(serializePage(updated));
+}));
+
+router.patch('/pages/:pageId/comments/:threadId', authMiddleware, asyncHandler(async (req, res) => {
+  const page = await Page.findById(req.params.pageId);
+  if (!page) throw new AppError('Page not found', 404, 'PAGE_NOT_FOUND');
+
+  const workspace = await getWorkspaceForUser(page.workspaceId, req.user.id);
+  if (!workspace) throw new AppError('Access denied', 403, 'ACCESS_DENIED');
+  if (!hasRole(workspace, req.user.id, 'commenter')) {
+    throw new AppError('Insufficient role for comments', 403, 'INSUFFICIENT_ROLE');
+  }
+
+  const threads = Array.isArray(page.commentThreads) ? page.commentThreads.map((thread) => normalizeThread(thread)) : [];
+  const index = threads.findIndex((thread) => thread.id === req.params.threadId);
+  if (index < 0) throw new AppError('Thread not found', 404, 'THREAD_NOT_FOUND');
+
+  if (typeof req.body?.resolved !== 'boolean') {
+    throw new AppError('Resolved flag is required', 400, 'VALIDATION_ERROR');
+  }
+
+  threads[index].resolved = req.body.resolved;
+
+  const updated = await Page.findByIdAndUpdate(page._id, {
+    $set: { commentThreads: threads, updatedBy: req.user.id },
+  }, { new: true });
+
+  res.json(serializePage(updated));
 }));
 
 router.get('/:workspaceId/members', authMiddleware, asyncHandler(async (req, res) => {
@@ -288,4 +445,3 @@ router.delete('/:workspaceId/members/:memberUserId', authMiddleware, asyncHandle
 }));
 
 module.exports = router;
-

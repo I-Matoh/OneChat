@@ -42,12 +42,44 @@ const validateWorkspaceCreate = validateBody(Joi.object({
 const validatePageCreate = validateBody(Joi.object({
   title: Joi.string().trim().min(1).max(180).optional(),
   content: Joi.string().max(200000).optional(),
+  blocks: Joi.array().items(Joi.object({
+    id: Joi.string().trim().max(80).optional(),
+    type: Joi.string().valid('paragraph', 'heading', 'checklist', 'quote', 'code', 'toggle').required(),
+    text: Joi.string().allow('').max(20000).optional(),
+    checked: Joi.boolean().optional(),
+    collapsed: Joi.boolean().optional(),
+    level: Joi.number().integer().min(1).max(3).optional(),
+    language: Joi.string().allow('').max(40).optional(),
+    order: Joi.number().optional(),
+    mentions: Joi.array().items(Joi.object({
+      id: Joi.string().trim().max(80).optional(),
+      type: Joi.string().valid('user', 'page', 'document').required(),
+      refId: Joi.string().trim().min(1).max(120).required(),
+      label: Joi.string().trim().min(1).max(180).required(),
+    })).optional(),
+  })).max(500).optional(),
   parentId: objectIdLike.allow(null, '').optional(),
 }));
 
 const validatePagePatch = validateBody(Joi.object({
   title: Joi.string().trim().min(1).max(180).optional(),
   content: Joi.string().max(200000).optional(),
+  blocks: Joi.array().items(Joi.object({
+    id: Joi.string().trim().max(80).optional(),
+    type: Joi.string().valid('paragraph', 'heading', 'checklist', 'quote', 'code', 'toggle').required(),
+    text: Joi.string().allow('').max(20000).optional(),
+    checked: Joi.boolean().optional(),
+    collapsed: Joi.boolean().optional(),
+    level: Joi.number().integer().min(1).max(3).optional(),
+    language: Joi.string().allow('').max(40).optional(),
+    order: Joi.number().optional(),
+    mentions: Joi.array().items(Joi.object({
+      id: Joi.string().trim().max(80).optional(),
+      type: Joi.string().valid('user', 'page', 'document').required(),
+      refId: Joi.string().trim().min(1).max(120).required(),
+      label: Joi.string().trim().min(1).max(180).required(),
+    })).optional(),
+  })).max(500).optional(),
   icon: Joi.string().trim().max(60).optional(),
   order: Joi.number().optional(),
   parentId: objectIdLike.allow(null, '').optional(),
@@ -126,4 +158,3 @@ module.exports = {
   validateDocCreate,
   validateDocPatch,
 };
-
