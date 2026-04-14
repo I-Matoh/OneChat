@@ -210,7 +210,7 @@ function Navbar({ onCTA }) {
           <Link to="/login" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors select-none">
             Sign in
           </Link>
-          <Link to="/login" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors select-none shadow-sm">
+          <Link to="/signup" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors select-none shadow-sm">
             Start Free <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
@@ -228,7 +228,7 @@ function Navbar({ onCTA }) {
               {l.label}
             </a>
           ))}
-          <Link to="/login" className="mt-2 flex items-center justify-center gap-1.5 w-full px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold select-none">
+          <Link to="/signup" className="mt-2 flex items-center justify-center gap-1.5 w-full px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold select-none">
             Start Free <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
@@ -344,7 +344,7 @@ function PricingCard({ plan, isYearly }) {
         ))}
       </ul>
       <Link
-        to="/login"
+        to="/signup"
         className={cn(
           'w-full text-center py-2.5 rounded-xl font-semibold text-sm transition-all select-none',
           plan.highlight
@@ -409,7 +409,7 @@ export default function Landing() {
 
         <Reveal delay={240}>
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
-            <Link to="/login" className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all shadow-lg shadow-primary/25 select-none text-sm sm:text-base">
+            <Link to="/signup" className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all shadow-lg shadow-primary/25 select-none text-sm sm:text-base">
               Start Free Trial <ArrowRight className="w-4 h-4" />
             </Link>
             <a href="#features" className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl border border-border bg-card text-foreground font-semibold hover:bg-muted transition-all select-none text-sm sm:text-base">

@@ -39,13 +39,18 @@ export function AuthProvider({ children }) {
 
         if (!res.ok) throw new Error('Session expired');
 
+        const contentType = res.headers.get('content-type');
+        if (!contentType?.includes('application/json')) {
+          throw new Error('Invalid server response');
+        }
+
         const data = await res.json();
         if (cancelled) return;
 
         setUser(data.user);
         setToken(parsed.token);
         localStorage.setItem('onechat_auth', JSON.stringify({ token: parsed.token, user: data.user }));
-      } catch {
+      } catch (err) {
         if (!cancelled) {
           setUser(null);
           setToken(null);
@@ -70,8 +75,15 @@ export function AuthProvider({ children }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
+    if (!res.ok) {
+      const contentType = res.headers.get('content-type');
+      if (contentType?.includes('application/json')) {
+        const data = await res.json();
+        throw new Error(resolveApiErrorMessage(data, 'Login failed'));
+      }
+      throw new Error('Login failed - server may be unavailable');
+    }
     const data = await res.json();
-    if (!res.ok) throw new Error(resolveApiErrorMessage(data, 'Login failed'));
     setUser(data.user);
     setToken(data.token);
     localStorage.setItem('onechat_auth', JSON.stringify(data));
@@ -84,8 +96,15 @@ export function AuthProvider({ children }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, email, password }),
     });
+    if (!res.ok) {
+      const contentType = res.headers.get('content-type');
+      if (contentType?.includes('application/json')) {
+        const data = await res.json();
+        throw new Error(resolveApiErrorMessage(data, 'Registration failed'));
+      }
+      throw new Error('Registration failed - server may be unavailable');
+    }
     const data = await res.json();
-    if (!res.ok) throw new Error(resolveApiErrorMessage(data, 'Registration failed'));
     setUser(data.user);
     setToken(data.token);
     localStorage.setItem('onechat_auth', JSON.stringify(data));

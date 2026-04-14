@@ -14,6 +14,7 @@ import Tasks from '@/pages/Tasks';
 import AIAssistant from '@/pages/AIAssistant';
 import Search from '@/pages/Search';
 import Landing from '@/pages/Landing';
+import Login from '@/pages/Login';
 import MeetingAI from '@/pages/MeetingAI';
 import Settings from '@/pages/Settings';
 
@@ -36,6 +37,7 @@ const AuthenticatedApp = () => {
   if (!user) {
     return (
       <Routes>
+        <Route path="/" element={<Landing />} />
         <Route path="/signup" element={<Login />} />
         <Route path="/login" element={<Login />} />
         <Route path="*" element={<Landing />} />
