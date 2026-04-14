@@ -1,449 +1,222 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useAuth } from '../hooks/useAuth';
-import { getSocket, useSocketEvent } from '../hooks/useSocket';
-import { useApi } from '../hooks/useApi';
-import AIAssistantPanel from '../components/AIAssistantPanel';
+import { useState, useEffect, useRef } from 'react';
+import { useOutletContext } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Hash, Plus, Send, MessageSquare, Users } from 'lucide-react';
+import { formatDistanceToNow, format } from 'date-fns';
+import { cn } from '@/lib/utils';
 
-const AttachIcon = () => (
-  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-  </svg>
-);
+export default function Chat() {
+  const { user, currentWorkspaceId } = useOutletContext();
+  const [selectedConvId, setSelectedConvId] = useState(null);
+  const [messageText, setMessageText] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
+  const [sending, setSending] = useState(false);
+  const bottomRef = useRef(null);
+  const queryClient = useQueryClient();
 
-const EmojiIcon = () => (
-  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);
-
-const SendIcon = () => (
-  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-  </svg>
-);
-
-const CheckIcon = () => (
-  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-  </svg>
-);
-
-const CheckDoubleIcon = () => (
-  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);
-
-const EyeIcon = () => (
-  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-  </svg>
-);
-
-function MessageSkeleton() {
-  return (
-    <div className="message-skeleton">
-      <div className="skeleton-avatar" />
-      <div className="skeleton-bubble">
-        <div className="skeleton-line short" />
-        <div className="skeleton-line" />
-      </div>
-    </div>
-  );
-}
-
-function TypingIndicator({ users }) {
-  const names = users.map(u => u.userName).join(', ');
-  return (
-    <div className="typing-indicator">
-      <div className="typing-bubble">
-        <span className="typing-dot" />
-        <span className="typing-dot" />
-        <span className="typing-dot" />
-      </div>
-      <span className="typing-text">{names} {users.length === 1 ? 'is' : 'are'} typing</span>
-    </div>
-  );
-}
-
-export default function Chat({ activeConvId, setActiveConvId, conversations, setConversations }) {
-  const { user, token } = useAuth();
-  const { apiFetch } = useApi();
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
-  const [typingUsers, setTypingUsers] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [showAttachments, setShowAttachments] = useState(false);
-  const [showEmoji, setShowEmoji] = useState(false);
-  const messagesEndRef = useRef(null);
-  const inputRef = useRef(null);
-  const typingTimeout = useRef(null);
-
-  const activeConvIdRef = useRef(activeConvId);
-  const setConversationsRef = useRef(setConversations);
-  const setMessagesRef = useRef(setMessages);
-  const setTypingUsersRef = useRef(setTypingUsers);
-
-  useEffect(() => { activeConvIdRef.current = activeConvId; }, [activeConvId]);
-  useEffect(() => { setConversationsRef.current = setConversations; }, [setConversations]);
-  useEffect(() => { setMessagesRef.current = setMessages; }, [setMessages]);
-  useEffect(() => { setTypingUsersRef.current = setTypingUsers; }, [setTypingUsers]);
-
-  useEffect(() => {
-    if (!activeConvId) {
-      setMessages([]);
-      return;
-    }
-    setLoading(true);
-    setMessages([]);
-    apiFetch(`/chat/conversations/${activeConvId}/messages`)
-      .then((data) => {
-        setMessages(data || []);
-        setLoading(false);
-      })
-      .catch(() => {
-        setMessages([]);
-        setLoading(false);
-      });
-  }, [activeConvId]);
-
-  useEffect(() => {
-    if (!token) return;
-    const s = getSocket(token);
-    if (activeConvId) s.emit('chat:join', activeConvId);
-    return () => {
-      if (activeConvId) s.emit('chat:leave', activeConvId);
-    };
-  }, [activeConvId, token]);
-
-  useSocketEvent('message:new', (msg) => {
-    const currentConvId = activeConvIdRef.current;
-    if (msg.conversationId === currentConvId) {
-      setMessagesRef.current((prev) => [...prev, msg]);
-    }
-    setConversationsRef.current((prev) =>
-      prev.map((c) =>
-        c._id === msg.conversationId ? { ...c, lastMessage: msg.content, updatedAt: msg.createdAt } : c
-      ).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
-    );
-  }, []);
-
-  useSocketEvent('message:typing', (data) => {
-    const currentConvId = activeConvIdRef.current;
-    if (data.conversationId !== currentConvId) return;
-    setTypingUsersRef.current((prev) => {
-      if (prev.find((u) => u.userId === data.userId)) return prev;
-      return [...prev, data];
-    });
-    setTimeout(() => {
-      setTypingUsersRef.current((prev) => prev.filter((u) => u.userId !== data.userId));
-    }, 3000);
-  }, []);
-
-  useSocketEvent('message:status', (data) => {
-    setMessagesRef.current((prev) =>
-      prev.map((m) => m._id === data.messageId ? { ...m, status: data.status } : m)
-    );
-  }, []);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  const handleSend = useCallback((e) => {
-    e?.preventDefault();
-    if (!input.trim() || !activeConvId) return;
-    const s = getSocket(token);
-    s.emit('message:send', { conversationId: activeConvId, content: input.trim() });
-    setInput('');
-  }, [input, activeConvId, token]);
-
-  const handleInputChange = useCallback((e) => {
-    setInput(e.target.value);
-    const s = getSocket(token);
-    if (typingTimeout.current) clearTimeout(typingTimeout.current);
-    s.emit('message:typing', { conversationId: activeConvId });
-    typingTimeout.current = setTimeout(() => {}, 3000);
-  }, [activeConvId, token]);
-
-  const handleKeyDown = useCallback((e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  }, [handleSend]);
-
-  const formatTime = (ts) => {
-    const date = new Date(ts);
-    const now = new Date();
-    const isToday = date.toDateString() === now.toDateString();
-    if (isToday) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
-    return date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + 
-           date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-
-  const groupMessages = (msgs) => {
-    const groups = [];
-    let currentGroup = null;
-    msgs.forEach((msg) => {
-      const isOwn = (msg.senderId === user.id) || (msg.senderId?._id === user.id);
-      if (!currentGroup || currentGroup.isOwn !== isOwn || 
-          new Date(msg.createdAt) - new Date(currentGroup.lastTime) > 300000) {
-        currentGroup = { isOwn, messages: [msg], firstTime: msg.createdAt, lastTime: msg.createdAt };
-        groups.push(currentGroup);
-      } else {
-        currentGroup.messages.push(msg);
-        currentGroup.lastTime = msg.createdAt;
-      }
-    });
-    return groups;
-  };
-
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'sent': return <CheckIcon />;
-      case 'delivered': return <CheckDoubleIcon />;
-      case 'seen': return <EyeIcon />;
-      default: return null;
-    }
-  };
-
-  const filteredConversations = conversations.filter(c => {
-    const displayName = c.name || c.participants?.map(p => p.name || 'User').join(', ') || 'Chat';
-    return displayName.toLowerCase().includes(searchQuery.toLowerCase());
+  const { data: conversations = [] } = useQuery({
+    queryKey: ['conversations', currentWorkspaceId],
+    queryFn: () => fetch(`/api/chat/conversations?workspaceId=${currentWorkspaceId}`).then(r => r.json()),
+    enabled: !!currentWorkspaceId,
   });
 
-  if (!activeConvId) {
-    return (
-      <div className="chat-layout">
-        <div className="chat-sidebar">
-          <div className="chat-sidebar-header">
-            <h2 className="chat-sidebar-title">Conversations</h2>
-            <div className="chat-search">
-              <span className="chat-search-icon">🔍</span>
-              <input 
-                type="text" 
-                className="chat-search-input"
-                placeholder="Search..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="chat-list">
-            {filteredConversations.map((conv) => {
-              const displayName = conv.name || conv.participants?.filter((p) => (p._id || p) !== user.id).map((p) => p.name || 'User').join(', ') || 'Chat';
-              const isActive = activeConvId === conv._id;
-              return (
-                <div
-                  key={conv._id}
-                  className={`chat-item ${isActive ? 'active' : ''}`}
-                  onClick={() => setActiveConvId(conv._id)}
-                >
-                  <div className="chat-avatar">
-                    {displayName[0].toUpperCase()}
-                    <span className="chat-avatar-dot"></span>
-                  </div>
-                  <div className="chat-info">
-                    <div className="chat-name-row">
-                      <span className="chat-name">{displayName}</span>
-                      <span className="chat-time">
-                        {conv.updatedAt ? new Date(conv.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                      </span>
-                    </div>
-                    <div className="chat-preview">{conv.lastMessage || 'No messages yet'}</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        <div className="chat-main">
-          <div className="empty-state">
-            <div className="empty-icon">💬</div>
-            <div className="empty-title">Select a conversation</div>
-            <div className="empty-hint">Choose from the sidebar to start chatting</div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const { data: messages = [] } = useQuery({
+    queryKey: ['messages', selectedConvId],
+    queryFn: () => fetch(`/api/chat/messages?conversationId=${selectedConvId}`).then(r => r.json()),
+    enabled: !!selectedConvId,
+    refetchInterval: 3000,
+  });
 
-  const activeConv = conversations.find((c) => c._id === activeConvId);
-  const otherParticipants = activeConv?.participants?.filter((p) => (p._id || p) !== user.id) || [];
-  const displayName = activeConv?.name || activeConv?.participants?.filter((p) => (p._id || p) !== user.id).map((p) => p.name || 'User').join(', ') || 'Chat';
-  const messageGroups = groupMessages(messages);
-  const participantStatus = activeConv?.participants?.some((participant) => participant.status === 'online') ? 'Online' : 'Away';
+  const selectedConv = conversations.find(c => c.id === selectedConvId);
+
+  useEffect(() => {
+    if (conversations.length > 0 && !selectedConvId) {
+      setSelectedConvId(conversations[0].id);
+    }
+  }, [conversations]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const sendMessage = async () => {
+    if (!messageText.trim() || !selectedConvId || sending) return;
+    setSending(true);
+    const text = messageText.trim();
+    setMessageText('');
+
+    const optimisticMsg = {
+      id: `optimistic-${Date.now()}`,
+      conversation_id: selectedConvId,
+      workspace_id: currentWorkspaceId,
+      sender_email: user?.email,
+      sender_name: user?.full_name || user?.email,
+      content: text,
+      message_type: 'text',
+      created_date: new Date().toISOString(),
+    };
+    queryClient.setQueryData(['messages', selectedConvId], (old = []) => [...old, optimisticMsg]);
+
+    try {
+      await fetch('/api/chat/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversation_id: selectedConvId,
+          workspace_id: currentWorkspaceId,
+          sender_email: user?.email,
+          sender_name: user?.full_name || user?.email,
+          content: text,
+          message_type: 'text',
+        })
+      });
+      await fetch(`/api/chat/conversations/${selectedConvId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          last_message: text,
+          last_message_at: new Date().toISOString(),
+        })
+      });
+    } catch (error) {
+      console.error('Failed to send message:', error);
+    }
+    queryClient.invalidateQueries({ queryKey: ['messages', selectedConvId] });
+    queryClient.invalidateQueries({ queryKey: ['conversations', currentWorkspaceId] });
+    setSending(false);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  };
 
   return (
-    <div className="chat-layout">
-      <div className="chat-sidebar">
-        <div className="chat-sidebar-header">
-          <h2 className="chat-sidebar-title">Conversations</h2>
-          <div className="chat-search">
-            <span className="chat-search-icon">🔍</span>
-            <input 
-              type="text" 
-              className="chat-search-input"
-              placeholder="Search..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
+    <div className="flex h-full">
+      <div className="w-44 sm:w-56 border-r border-border bg-muted/30 flex flex-col shrink-0">
+        <div className="p-3 border-b border-border flex items-center justify-between">
+          <span className="text-sm font-semibold text-foreground">Channels</span>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="w-6 h-6 flex items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
         </div>
-        <div className="chat-list">
-          {filteredConversations.map((conv) => {
-            const name = conv.name || conv.participants?.filter((p) => (p._id || p) !== user.id).map((p) => p.name || 'User').join(', ') || 'Chat';
-            const isActive = activeConvId === conv._id;
-            return (
-              <div
-                key={conv._id}
-                className={`chat-item ${isActive ? 'active' : ''}`}
-                onClick={() => setActiveConvId(conv._id)}
+        <div className="flex-1 overflow-y-auto scrollbar-thin p-2 space-y-0.5">
+          {conversations.length === 0 ? (
+            <p className="text-xs text-muted-foreground p-2 text-center">No channels yet</p>
+          ) : (
+            conversations.map(conv => (
+              <button
+                key={conv.id}
+                onClick={() => setSelectedConvId(conv.id)}
+                className={cn(
+                  "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors text-left",
+                  selectedConvId === conv.id
+                    ? "bg-primary/10 text-primary font-medium"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
               >
-                <div className="chat-avatar">
-                  {name[0].toUpperCase()}
-                  <span className="chat-avatar-dot"></span>
-                </div>
-                <div className="chat-info">
-                  <div className="chat-name-row">
-                    <span className="chat-name">{name}</span>
-                    <span className="chat-time">
-                      {conv.updatedAt ? new Date(conv.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                    </span>
-                  </div>
-                  <div className="chat-preview">{conv.lastMessage || 'No messages yet'}</div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="chat-main">
-        <div className="chat-header">
-          <div className="chat-header-info">
-              <div className="chat-avatar">{displayName[0].toUpperCase()}</div>
-              <div className="chat-info">
-                <div className="chat-name">{displayName}</div>
-                <div className="chat-header-status">{participantStatus}</div>
-              </div>
-            </div>
-          <div className="chat-header-actions">
-            <button className="btn-icon" title="Voice call">📞</button>
-            <button className="btn-icon" title="Video call">📹</button>
-            <button className="btn-icon" title="More options">⋮</button>
-          </div>
-        </div>
-
-        <div className="messages-panel">
-          {loading ? (
-            <>
-              <MessageSkeleton />
-              <MessageSkeleton />
-              <MessageSkeleton />
-            </>
-          ) : messageGroups.map((group, gIdx) => (
-            <div key={gIdx} className={`message-group ${group.isOwn ? 'own' : ''}`}>
-              {!group.isOwn && (
-                <div className="message-avatar">
-                  {group.messages[0].senderName?.[0]?.toUpperCase() || '?'}
-                </div>
-              )}
-              <div className="message-bubbles">
-                {group.messages.map((msg) => (
-                  <div key={msg._id} className="message-bubble-entry">
-                    <div className="message-bubble">
-                      <div className="message-text">{msg.content}</div>
-                      <div className="message-meta">
-                        <span className="message-time">{formatTime(msg.createdAt)}</span>
-                        {group.isOwn && (
-                          <span className={`message-status ${msg.status || 'sent'}`}>
-                            {getStatusIcon(msg.status)}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-          {typingUsers.length > 0 && <TypingIndicator users={typingUsers} />}
-          <div ref={messagesEndRef} />
-        </div>
-
-        <div className="chat-input-panel">
-          <div className="chat-input-tools">
-            <button 
-              className="chat-tool-btn" 
-              onClick={() => setShowAttachments(!showAttachments)}
-              title="Attach file"
-            >
-              <AttachIcon />
-            </button>
-            <button 
-              className="chat-tool-btn" 
-              onClick={() => setShowEmoji(!showEmoji)}
-              title="Add emoji"
-            >
-              <EmojiIcon />
-            </button>
-          </div>
-          <form className="chat-input-form" onSubmit={handleSend}>
-            <textarea
-              ref={inputRef}
-              className="chat-input"
-              placeholder="Type a message... (Enter to send, Shift+Enter for new line)"
-              value={input}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              rows={1}
-            />
-            <button type="submit" className="btn btn-primary chat-send-btn" disabled={!input.trim()}>
-              <SendIcon />
-            </button>
-          </form>
-          <div className="chat-input-hint">Enter to send • Shift+Enter for new line</div>
-        </div>
-
-        <AIAssistantPanel context={messages} contextType="chat" />
-      </div>
-
-      <div className="contact-panel">
-        <div className="contact-header">
-          <div className="contact-avatar-large">{displayName[0].toUpperCase()}</div>
-          <div className="contact-name">{displayName}</div>
-          <div className="contact-status">{participantStatus}</div>
-        </div>
-        <div className="contact-details">
-          {otherParticipants.map((participant) => (
-            <div key={participant._id || participant.id} className="contact-section">
-              <div className="contact-label">{participant.name || 'User'}</div>
-              <div className="contact-value">{participant.email || 'No email available'}</div>
-            </div>
-          ))}
-          {otherParticipants.length === 0 && (
-            <div className="contact-section">
-              <div className="contact-label">Conversation details</div>
-              <div className="contact-value">No participant metadata available.</div>
-            </div>
+                {conv.type === 'direct' ? <Users className="w-3.5 h-3.5 shrink-0" /> : <Hash className="w-3.5 h-3.5 shrink-0" />}
+                <span className="truncate">{conv.name}</span>
+              </button>
+            ))
           )}
         </div>
-        <div className="contact-actions">
-          <button className="contact-action-btn">
-            <span>📞</span> Voice Call
-          </button>
-          <button className="contact-action-btn">
-            <span>📹</span> Video Call
-          </button>
-          <button className="contact-action-btn danger">
-            <span>🚫</span> Block
-          </button>
+      </div>
+
+      <div className="flex-1 flex flex-col">
+        {selectedConv ? (
+          <>
+            <div className="px-5 py-3 border-b border-border flex items-center gap-2">
+              <Hash className="w-4.5 h-4.5 text-muted-foreground" />
+              <h2 className="font-semibold text-foreground">{selectedConv.name}</h2>
+            </div>
+
+            <div className="flex-1 overflow-y-auto scrollbar-thin p-4 space-y-4">
+              {messages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-center">
+                  <MessageSquare className="w-10 h-10 text-muted-foreground/40 mb-3" />
+                  <p className="text-sm text-muted-foreground">No messages yet. Start the conversation!</p>
+                </div>
+              ) : (
+                messages.map((msg, i) => {
+                  const isMe = msg.sender_email === user?.email;
+                  const prevMsg = messages[i - 1];
+                  const sameAuthor = prevMsg?.sender_email === msg.sender_email &&
+                    (new Date(msg.created_date) - new Date(prevMsg.created_date)) < 300000;
+                  return (
+                    <MessageBubble key={msg.id} msg={msg} isMe={isMe} compact={sameAuthor} />
+                  );
+                })
+              )}
+              <div ref={bottomRef} />
+            </div>
+
+            <div className="p-3 border-t border-border">
+              <div className="flex items-center gap-2 bg-muted/60 rounded-xl px-3 py-2 border border-border">
+                <Input
+                  value={messageText}
+                  onChange={e => setMessageText(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={`Message #${selectedConv.name}`}
+                  className="border-0 bg-transparent shadow-none focus-visible:ring-0 px-0 text-sm"
+                />
+                <button
+                  onClick={sendMessage}
+                  disabled={!messageText.trim() || sending}
+                  className="w-8 h-8 flex items-center justify-center bg-primary rounded-lg text-primary-foreground disabled:opacity-40 hover:bg-primary/90 transition-colors shrink-0"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <MessageSquare className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
+              <p className="text-muted-foreground">Select a channel to start chatting</p>
+              <Button className="mt-4" onClick={() => setShowCreate(true)}>
+                <Plus className="w-4 h-4 mr-1.5" /> Create Channel
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MessageBubble({ msg, isMe, compact }) {
+  return (
+    <div className={cn("flex gap-3 group", isMe && "flex-row-reverse")}>
+      {!compact ? (
+        <Avatar className="w-8 h-8 shrink-0 mt-0.5">
+          <AvatarFallback className={cn("text-xs font-semibold", isMe ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
+            {(msg.sender_name || msg.sender_email)?.[0]?.toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+      ) : (
+        <div className="w-8 shrink-0" />
+      )}
+      <div className={cn("max-w-[70%]", isMe && "items-end flex flex-col")}>
+        {!compact && (
+          <div className={cn("flex items-baseline gap-2 mb-1", isMe && "flex-row-reverse")}>
+            <span className="text-xs font-semibold text-foreground">{msg.sender_name || msg.sender_email}</span>
+            <span className="text-xs text-muted-foreground">{format(new Date(msg.created_date), 'HH:mm')}</span>
+          </div>
+        )}
+        <div className={cn(
+          "px-3 py-2 rounded-2xl text-sm leading-relaxed",
+          isMe
+            ? "bg-primary text-primary-foreground rounded-tr-sm"
+            : "bg-card border border-border text-foreground rounded-tl-sm"
+        )}>
+          {msg.content}
         </div>
       </div>
     </div>

@@ -9,10 +9,10 @@ vi.mock('./hooks/useAuth', () => ({
     logout: vi.fn(),
   }),
   AuthProvider: ({ children }) => children,
-}));
+})); 
 
 vi.mock('./hooks/useApi', () => ({
-  useApi: () => ({
+  useApi: () => ({ 
     apiFetch: vi.fn(async (url) => {
       if (url === '/chat/conversations') return [];
       if (url === '/docs') return [];
@@ -46,7 +46,7 @@ vi.mock('./pages/Editor', () => ({
 
 vi.mock('./pages/Workspace', () => ({
   default: () => <div>Workspace Stub</div>,
-}));
+})); 
 
 vi.mock('./components/NotificationBell', () => ({
   default: () => <div>Notifications</div>,

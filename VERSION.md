@@ -217,8 +217,6 @@ OneChat v1.0 provides a functional MVP with:
 | Optimistic updates | Immediate UI feedback |
 | Code splitting | Lazy load routes |
 
----
-
 ## 7. Feature Priority Matrix
 
 | Feature | Priority | Effort | Impact |

@@ -12,6 +12,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/auth': 'http://localhost:5000',
+      '/api': 'http://localhost:5000',
       '/chat': 'http://localhost:5000',
       '/docs': 'http://localhost:5000',
       '/users': 'http://localhost:5000',
