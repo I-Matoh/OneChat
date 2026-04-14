@@ -77,6 +77,8 @@ router.post('/', authMiddleware, validateWorkspaceCreate, asyncHandler(async (re
 
   const workspace = await Workspace.create({
     name,
+    description: req.body.description || '',
+    icon: req.body.icon || '🏢',
     ownerId: req.user.id,
     members: [{ userId: req.user.id, role: 'owner' }],
   });
@@ -92,6 +94,41 @@ router.post('/', authMiddleware, validateWorkspaceCreate, asyncHandler(async (re
   res.status(201).json(workspace);
 }));
 
+/**
+ * PATCH /workspaces/:workspaceId
+ * Update a workspace.
+ */
+router.patch('/:workspaceId', authMiddleware, asyncHandler(async (req, res) => {
+  const workspace = await getWorkspaceForUser(req.params.workspaceId, req.user.id);
+  if (!workspace) throw new AppError('Workspace not found', 404, 'WORKSPACE_NOT_FOUND');
+  if (!hasRole(workspace, req.user.id, 'editor')) {
+    throw new AppError('Insufficient role for workspace update', 403, 'INSUFFICIENT_ROLE');
+  }
+
+  const updates = {};
+  if (typeof req.body.name === 'string') updates.name = req.body.name.trim();
+  if (typeof req.body.description === 'string') updates.description = req.body.description;
+  if (typeof req.body.icon === 'string') updates.icon = req.body.icon;
+
+  const updated = await Workspace.findByIdAndUpdate(workspace._id, { $set: updates }, { new: true });
+  res.json(updated);
+}));
+
+/**
+ * DELETE /workspaces/:workspaceId
+ * Delete a workspace.
+ */
+router.delete('/:workspaceId', authMiddleware, asyncHandler(async (req, res) => {
+  const workspace = await getWorkspaceForUser(req.params.workspaceId, req.user.id);
+  if (!workspace) throw new AppError('Workspace not found', 404, 'WORKSPACE_NOT_FOUND');
+  if (!hasRole(workspace, req.user.id, 'owner')) {
+    throw new AppError('Only owner can delete workspace', 403, 'INSUFFICIENT_ROLE');
+  }
+
+  await Workspace.findByIdAndDelete(workspace._id);
+  res.json({ success: true });
+}));
+
 router.get('/:workspaceId/pages', authMiddleware, asyncHandler(async (req, res) => {
   const workspace = await getWorkspaceForUser(req.params.workspaceId, req.user.id);
   if (!workspace || !hasRole(workspace, req.user.id, 'viewer')) {
@@ -101,6 +138,18 @@ router.get('/:workspaceId/pages', authMiddleware, asyncHandler(async (req, res) 
   const pages = await Page.find({ workspaceId: workspace._id })
     .sort({ parentId: 1, order: 1, updatedAt: -1 });
   res.json(pages.map(serializePage));
+}));
+
+router.get('/pages/:pageId', authMiddleware, asyncHandler(async (req, res) => {
+  const page = await Page.findById(req.params.pageId);
+  if (!page) throw new AppError('Page not found', 404, 'PAGE_NOT_FOUND');
+
+  const workspace = await getWorkspaceForUser(page.workspaceId, req.user.id);
+  if (!workspace || !hasRole(workspace, req.user.id, 'viewer')) {
+    throw new AppError('Access denied', 403, 'ACCESS_DENIED');
+  }
+
+  res.json(serializePage(page));
 }));
 
 router.post('/:workspaceId/pages', authMiddleware, validatePageCreate, asyncHandler(async (req, res) => {

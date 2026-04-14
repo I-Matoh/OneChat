@@ -3,7 +3,7 @@ import { useOutletContext } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Sparkles, Send, Loader2, User, Bot, Trash2 } from 'lucide-react';
+import { Sparkles, Send, Loader2, User, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 
@@ -24,6 +24,18 @@ export default function AIAssistant() {
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef(null);
 
+  const { data: pages = [] } = useQuery({
+    queryKey: ['pages', currentWorkspaceId],
+    queryFn: () => base44.entities.Page.filter({ workspace_id: currentWorkspaceId, is_archived: false }),
+    enabled: !!currentWorkspaceId,
+  });
+
+  const { data: tasks = [] } = useQuery({
+    queryKey: ['tasks', currentWorkspaceId],
+    queryFn: () => base44.entities.Task.filter({ workspace_id: currentWorkspaceId }),
+    enabled: !!currentWorkspaceId,
+  });
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -37,19 +49,26 @@ export default function AIAssistant() {
     setMessages(newMessages);
     setLoading(true);
 
-    const prompt = `${newMessages.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n')}\n\nAssistant:`;
+    const pagesSummary = pages.slice(0, 5).map(p => `- "${p.title}" (${p.page_type})`).join('\n');
+    const tasksSummary = tasks.filter(t => t.status !== 'done').slice(0, 10).map(t =>
+      `- "${t.title}" [${t.priority} priority, ${t.status}${t.assignee_email ? `, assigned to ${t.assignee_email}` : ''}]`
+    ).join('\n');
 
-    try {
-      const response = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, context: { user, workspaceId: currentWorkspaceId } })
-      });
-      const data = await response.json();
-      setMessages(prev => [...prev, { role: 'assistant', content: data.response || "I couldn't process that request." }]);
-    } catch (error) {
-      setMessages(prev => [...prev, { role: 'assistant', content: "Sorry, I encountered an error processing your request." }]);
-    }
+    const systemContext = `You are an AI assistant for a team workspace called OneChat.
+Workspace context:
+Pages (${pages.length} total):
+${pagesSummary || 'No pages yet'}
+
+Open Tasks (${tasks.filter(t => t.status !== 'done').length} total):
+${tasksSummary || 'No open tasks'}
+
+Current user: ${user?.full_name || user?.email}
+Be concise, helpful and actionable. Format responses with markdown when helpful.`;
+
+    const prompt = `${systemContext}\n\nConversation so far:\n${newMessages.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n')}\n\nAssistant:`;
+
+    const response = await base44.integrations.Core.InvokeLLM({ prompt });
+    setMessages(prev => [...prev, { role: 'assistant', content: response }]);
     setLoading(false);
   };
 

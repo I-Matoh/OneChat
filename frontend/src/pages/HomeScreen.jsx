@@ -61,7 +61,7 @@ export default function HomeScreen({
         setMeetingTimeline([]);
         return;
       }
-      const parsed = JSON.parse(raw);
+      const parsed = JSON.parse(raw); 
       setMeetingTimeline(Array.isArray(parsed) ? parsed : []);
     } catch {
       setMeetingTimeline([]);

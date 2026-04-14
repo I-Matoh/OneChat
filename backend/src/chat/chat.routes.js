@@ -78,4 +78,73 @@ router.get('/conversations/:id/messages', authMiddleware, asyncHandler(async (re
   res.json(messages.reverse());
 }));
 
+/**
+ * POST /chat/messages
+ * Create a new message (alternative to socket).
+ */
+router.post('/messages', authMiddleware, asyncHandler(async (req, res) => {
+  const { conversationId, content } = req.body;
+  if (!conversationId || !content?.trim()) {
+    throw new AppError('conversationId and content are required', 400, 'VALIDATION_ERROR');
+  }
+
+  const conv = await Conversation.findOne({ _id: conversationId, participants: req.user.id });
+  if (!conv) throw new AppError('Conversation not found', 404, 'CONVERSATION_NOT_FOUND');
+
+  const msg = await Message.create({
+    conversationId,
+    senderId: req.user.id,
+    content: content.trim(),
+  });
+
+  await Conversation.findByIdAndUpdate(conversationId, {
+    lastMessage: content.trim(),
+    updatedAt: Date.now(),
+  });
+
+  const io = getGlobalIo();
+  if (io) {
+    io.to(`chat:${conversationId}`).emit('message:new', {
+      _id: msg._id,
+      conversationId,
+      senderId: req.user.id,
+      senderName: req.user.name,
+      content: content.trim(),
+      createdAt: msg.createdAt,
+      status: 'sent',
+    });
+  }
+
+  res.status(201).json(msg);
+}));
+
+/**
+ * PATCH /chat/messages/:messageId
+ * Update message (e.g., reactions).
+ */
+router.patch('/messages/:messageId', authMiddleware, asyncHandler(async (req, res) => {
+  const msg = await Message.findById(req.params.messageId);
+  if (!msg) throw new AppError('Message not found', 404, 'MESSAGE_NOT_FOUND');
+
+  if (req.body.reactions !== undefined) {
+    msg.reactions = req.body.reactions;
+  }
+  if (req.body.content !== undefined) {
+    msg.content = req.body.content;
+  }
+
+  await msg.save();
+
+  const io = getGlobalIo();
+  if (io) {
+    io.to(`chat:${msg.conversationId}`).emit('message:updated', {
+      _id: msg._id,
+      reactions: msg.reactions,
+      content: msg.content,
+    });
+  }
+
+  res.json(msg);
+}));
+
 module.exports = router;

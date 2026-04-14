@@ -21,4 +21,13 @@ router.get('/', authMiddleware, asyncHandler(async (req, res) => {
   res.json(users);
 }));
 
+/**
+ * DELETE /users/me
+ * Delete the current user's account.
+ */
+router.delete('/me', authMiddleware, asyncHandler(async (req, res) => {
+  await User.findByIdAndDelete(req.user.id);
+  res.json({ success: true });
+}));
+
 module.exports = router;

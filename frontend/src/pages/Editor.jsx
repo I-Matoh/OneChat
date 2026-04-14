@@ -12,7 +12,7 @@ export default function Editor({ activeDocId, setActiveDocId, documents, setDocu
   const { apiFetch } = useApi();
   const [doc, setDoc] = useState(null);
   const [content, setContent] = useState('');
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState(''); 
   const [collaborators, setCollaborators] = useState([]);
   const [saveStatus, setSaveStatus] = useState('Saved');
   const [cursorPositions, setCursorPositions] = useState({});

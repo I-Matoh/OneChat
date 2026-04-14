@@ -1320,6 +1320,7 @@ export default function Landing() {
 
 
 5. MeetingAI.jsx
+
 import { useState, useEffect, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
@@ -1944,7 +1945,10 @@ export default function Search() {
 }
 
 
+
+
 8.Settings.jsx
+
 import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
@@ -2308,7 +2312,10 @@ function NotificationsTab({ user }) {
   );
 }
 
+
+
 9.Tasks.jsx
+
 import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';

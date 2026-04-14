@@ -13,6 +13,7 @@ const messageSchema = new mongoose.Schema({
   senderId:       { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   content:        { type: String, required: true },
   status:         { type: String, enum: ['sent', 'delivered', 'seen'], default: 'sent' },
+  reactions:      { type: Array, default: [] },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Message', messageSchema);
