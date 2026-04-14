@@ -1,52 +1,29 @@
-import { useState } from 'react';
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel,
-  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
-  AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
-import { Trash2 } from 'lucide-react';
+import { Outlet } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import AppSidebar from './Appsidebar';
 import { useAuth } from '@/hooks/useAuth';
 
-export default function DeleteAccountDialog() {
-  const [loading, setLoading] = useState(false);
-  const { logout } = useAuth();
+export default function MainLayout() {
+  const { user, logout } = useAuth();
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState(null);
 
-  const handleDelete = async () => {
-    setLoading(true);
-    try {
-      await fetch('/users/me', { method: 'DELETE' });
-    } catch (e) {
-      // fallback
-    }
-    logout();
-  };
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const w = params.get('w');
+    if (w) setCurrentWorkspaceId(w);
+  }, []);
 
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <button className="flex items-center gap-2 text-xs text-destructive hover:text-destructive/80 transition-colors select-none min-h-[44px] px-1 w-full">
-          <Trash2 className="w-3.5 h-3.5" />
-          Delete Account
-        </button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Delete Account</AlertDialogTitle>
-          <AlertDialogDescription>
-            This will permanently delete your account and all associated data. This action cannot be undone.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel className="select-none">Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={handleDelete}
-            disabled={loading}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90 select-none"
-          >
-            {loading ? 'Deleting...' : 'Delete Account'}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <div className="flex h-screen w-full bg-background">
+      <AppSidebar
+        user={user}
+        currentWorkspaceId={currentWorkspaceId}
+        onWorkspaceChange={setCurrentWorkspaceId}
+        onLogout={logout}
+      />
+      <main className="flex-1 overflow-hidden">
+        <Outlet context={{ user, currentWorkspaceId }} />
+      </main>
+    </div>
   );
 }
