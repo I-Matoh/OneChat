@@ -18,7 +18,7 @@ interface AnimatedSignInProps {
 }
 
 const AnimatedSignIn: React.FC<AnimatedSignInProps> = ({ initialMode = "login" }) => {
-  const { login, register } = useAuth();
+  const { login, register, resetPassword, usingSupabase } = useAuth();
   const [mode, setMode] = useState<"login" | "register">(initialMode);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -31,8 +31,10 @@ const AnimatedSignIn: React.FC<AnimatedSignInProps> = ({ initialMode = "login" }
   const [isPasswordFocused, setIsPasswordFocused] = useState(false);
   const [isEmailValid, setIsEmailValid] = useState(true);
   const [isFormSubmitted, setIsFormSubmitted] = useState(false);
-  const [error, setError] = useState("");
+const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   const validateEmail = (value: string) => {
     const re =
@@ -272,7 +274,24 @@ const AnimatedSignIn: React.FC<AnimatedSignInProps> = ({ initialMode = "login" }
                 Remember me
               </label>
 
-              <button type="button" className="forgot-password">
+<button 
+                type="button" 
+                className="forgot-password"
+                onClick={async () => {
+                  if (mode === "login" && usingSupabase && email) {
+                    setSubmitting(true);
+                    try {
+                      await resetPassword(email.trim());
+                      setResetSent(true);
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : "Failed to send reset email");
+                    } finally {
+                      setSubmitting(false);
+                    }
+                  }
+                }}
+                disabled={mode !== "login" || !usingSupabase}
+              >
                 {mode === "login" ? "Forgot Password?" : "Secure sign-up"}
               </button>
             </div>
@@ -289,6 +308,11 @@ const AnimatedSignIn: React.FC<AnimatedSignInProps> = ({ initialMode = "login" }
               {submitting ? "Loading..." : mode === "login" ? "Sign In" : "Create Account"}
             </button>
 
+            {resetSent && (
+              <p className="success-message" style={{ marginTop: 12 }}>
+                Password reset email sent! Check your inbox.
+              </p>
+            )}
             {error && <p className="error-message" style={{ marginTop: 12 }}>{error}</p>}
           </form>
 

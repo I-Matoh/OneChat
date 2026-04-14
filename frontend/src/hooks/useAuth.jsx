@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, createContext, useContext } from 'react';
 import { disconnectSocket } from './useSocket';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 const AuthContext = createContext(null);
 
@@ -12,15 +13,55 @@ function resolveApiErrorMessage(data, fallbackMessage) {
   return fallbackMessage;
 }
 
+function parseSupabaseUser(sbUser) {
+  if (!sbUser) return null;
+  return {
+    id: sbUser.id,
+    email: sbUser.email,
+    name: sbUser.user_metadata?.name || sbUser.email?.split('@')[0],
+    avatarUrl: sbUser.user_metadata?.avatar_url,
+  };
+}
+
+async function fetchUserProfile(token) {
+  const res = await fetch(`${API}/auth/me`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.user;
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [usingSupabase, setUsingSupabase] = useState(isSupabaseConfigured);
 
   useEffect(() => {
     let cancelled = false;
 
     async function bootstrapAuth() {
+      if (!cancelled) setUsingSupabase(isSupabaseConfigured);
+
+      if (isSupabaseConfigured) {
+        try {
+          const { data: { session }, error } = await supabase.auth.getSession();
+          if (error) throw error;
+          
+          if (session && !cancelled) {
+            const parsedUser = parseSupabaseUser(session.user);
+            setUser(parsedUser);
+            setToken(session.access_token);
+            return;
+          }
+        } catch (err) {
+          console.warn('Supabase session restore failed:', err.message);
+        }
+      }
+
       const stored = localStorage.getItem('onechat_auth');
       if (!stored) {
         if (!cancelled) setLoading(false);
@@ -30,6 +71,19 @@ export function AuthProvider({ children }) {
       try {
         const parsed = JSON.parse(stored);
         if (!parsed?.token) throw new Error('Missing token');
+
+        if (isSupabaseConfigured && parsed.provider === 'supabase') {
+          const { data: { session }, error } = await supabase.auth.getSession();
+          if (error) throw error;
+          
+          if (session) {
+            setUser(parseSupabaseUser(session.user));
+            setToken(session.access_token);
+            setUsingSupabase(true);
+            if (!cancelled) setLoading(false);
+            return;
+          }
+        }
 
         const res = await fetch(`${API}/auth/me`, {
           headers: {
@@ -64,12 +118,51 @@ export function AuthProvider({ children }) {
 
     bootstrapAuth();
 
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        setUser(parseSupabaseUser(session.user));
+        setToken(session.access_token);
+        setUsingSupabase(true);
+        localStorage.setItem('onechat_auth', JSON.stringify({ 
+          token: session.access_token, 
+          user: parseSupabaseUser(session.user),
+          provider: 'supabase' 
+        }));
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setToken(null);
+        setUsingSupabase(false);
+        localStorage.removeItem('onechat_auth');
+        disconnectSocket();
+      }
+    });
+
     return () => {
       cancelled = true;
+      subscription.unsubscribe();
     };
   }, []);
 
   const login = useCallback(async (email, password) => {
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) throw new Error(error.message);
+      
+      const parsedUser = parseSupabaseUser(data.user);
+      setUser(parsedUser);
+      setToken(data.session.access_token);
+      setUsingSupabase(true);
+      localStorage.setItem('onechat_auth', JSON.stringify({ 
+        token: data.session.access_token, 
+        user: parsedUser,
+        provider: 'supabase' 
+      }));
+      return { user: parsedUser, token: data.session.access_token };
+    }
+
     const res = await fetch(`${API}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -91,6 +184,32 @@ export function AuthProvider({ children }) {
   }, []);
 
   const register = useCallback(async (name, email, password) => {
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { name },
+        },
+      });
+      if (error) throw new Error(error.message);
+      
+      const parsedUser = parseSupabaseUser(data.user);
+      
+      if (data.session) {
+        setUser(parsedUser);
+        setToken(data.session.access_token);
+        setUsingSupabase(true);
+        localStorage.setItem('onechat_auth', JSON.stringify({ 
+          token: data.session.access_token, 
+          user: parsedUser,
+          provider: 'supabase' 
+        }));
+      }
+      
+      return { user: parsedUser, token: data.session?.access_token };
+    }
+
     const res = await fetch(`${API}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -111,15 +230,27 @@ export function AuthProvider({ children }) {
     return data;
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    if (isSupabaseConfigured) {
+      await supabase.auth.signOut();
+    }
     setUser(null);
     setToken(null);
+    setUsingSupabase(false);
     localStorage.removeItem('onechat_auth');
     disconnectSocket();
   }, []);
 
+  const resetPassword = useCallback(async (email) => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Password reset not available - configure Supabase first');
+    }
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    if (error) throw new Error(error.message);
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, logout, resetPassword, usingSupabase }}>
       {children}
     </AuthContext.Provider>
   );
