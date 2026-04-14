@@ -11,19 +11,19 @@ export default function Home() {
 
   const { data: pages = [] } = useQuery({
     queryKey: ['pages', currentWorkspaceId],
-    queryFn: () => fetch(`/api/pages?workspaceId=${currentWorkspaceId}`).then(r => r.json()),
+    queryFn: () => fetch(`/pages?workspaceId=${currentWorkspaceId}`).then(r => r.json()),
     enabled: !!currentWorkspaceId,
   });
 
   const { data: tasks = [] } = useQuery({
     queryKey: ['tasks', currentWorkspaceId],
-    queryFn: () => fetch(`/api/tasks?workspaceId=${currentWorkspaceId}`).then(r => r.json()),
+    queryFn: () => fetch(`/tasks?workspaceId=${currentWorkspaceId}`).then(r => r.json()),
     enabled: !!currentWorkspaceId,
   });
 
   const { data: conversations = [] } = useQuery({
     queryKey: ['conversations', currentWorkspaceId],
-    queryFn: () => fetch(`/api/chat/conversations?workspaceId=${currentWorkspaceId}`).then(r => r.json()),
+    queryFn: () => fetch(`/chat/conversations?workspaceId=${currentWorkspaceId}`).then(r => r.json()),
     enabled: !!currentWorkspaceId,
   });
 

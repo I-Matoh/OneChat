@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -15,12 +16,13 @@ const STATUS_CONFIG = {
   todo: { label: 'Todo', icon: Circle, color: 'text-muted-foreground', bg: 'bg-muted' },
   in_progress: { label: 'In Progress', icon: Clock, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10' },
   done: { label: 'Done', icon: CheckSquare, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-500/10' },
+  blocked: { label: 'Blocked', icon: AlertCircle, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-500/10' },
 };
 
-const PRIORITY_CONFIG = {
-  low: { label: 'Low', color: 'text-muted-foreground border-muted' },
-  medium: { label: 'Medium', color: 'text-yellow-600 border-yellow-300 dark:border-yellow-600' },
-  high: { label: 'High', color: 'text-red-600 border-red-300 dark:border-red-700' },
+const DUE_CONFIG = {
+  overdue: { color: 'text-red-600 border-red-300' },
+  soon: { color: 'text-yellow-600 border-yellow-300' },
+  normal: { color: 'text-muted-foreground border-muted' },
 };
 
 export default function Tasks() {
@@ -32,17 +34,17 @@ export default function Tasks() {
 
   const { data: tasks = [] } = useQuery({
     queryKey: ['tasks', currentWorkspaceId],
-    queryFn: () => base44.entities.Task.filter({ workspace_id: currentWorkspaceId }),
+    queryFn: () => api.tasks.list(currentWorkspaceId),
     enabled: !!currentWorkspaceId,
   });
 
   const updateStatus = async (taskId, newStatus) => {
-    await base44.entities.Task.update(taskId, { status: newStatus });
+    await api.tasks.update(taskId, { status: newStatus });
     queryClient.invalidateQueries({ queryKey: ['tasks', currentWorkspaceId] });
   };
 
   const deleteTask = async (taskId) => {
-    await base44.entities.Task.delete(taskId);
+    await api.tasks.delete(taskId);
     queryClient.invalidateQueries({ queryKey: ['tasks', currentWorkspaceId] });
   };
 
@@ -51,6 +53,7 @@ export default function Tasks() {
     todo: filtered.filter(t => t.status === 'todo'),
     in_progress: filtered.filter(t => t.status === 'in_progress'),
     done: filtered.filter(t => t.status === 'done'),
+    blocked: filtered.filter(t => t.status === 'blocked'),
   };
 
   return (
@@ -105,6 +108,7 @@ export default function Tasks() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {Object.entries(grouped).map(([status, statusTasks]) => {
               const cfg = STATUS_CONFIG[status];
+              if (!cfg) return null;
               const Icon = cfg.icon;
               return (
                 <div key={status} className="space-y-2">
@@ -116,7 +120,7 @@ export default function Tasks() {
                   <div className="space-y-2">
                     {statusTasks.map(task => (
                       <TaskCard
-                        key={task.id}
+                        key={task._id}
                         task={task}
                         onStatusChange={updateStatus}
                         onDelete={deleteTask}
@@ -144,19 +148,28 @@ export default function Tasks() {
 }
 
 function TaskCard({ task, onStatusChange, onDelete, currentStatus }) {
-  const priorityCfg = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
-  const nextStatus = { todo: 'in_progress', in_progress: 'done', done: 'todo' };
+  const nextStatus = { todo: 'in_progress', in_progress: 'done', done: 'todo', blocked: 'in_progress' };
+  const dueDate = task.dueDate ? new Date(task.dueDate) : null;
+  let dueCfg = DUE_CONFIG.normal;
+  if (dueDate) {
+    const now = new Date();
+    const diffDays = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
+    if (diffDays < 0) dueCfg = DUE_CONFIG.overdue;
+    else if (diffDays <= 2) dueCfg = DUE_CONFIG.soon;
+  }
 
   return (
     <div className="bg-card border border-border rounded-xl p-3.5 shadow-sm hover:shadow-md transition-shadow group">
       <div className="flex items-start gap-2">
         <button
-          onClick={() => onStatusChange(task.id, nextStatus[currentStatus])}
+          onClick={() => onStatusChange(task._id, nextStatus[currentStatus])}
           className="mt-0.5 shrink-0 text-muted-foreground hover:text-primary transition-colors"
           title="Advance status"
         >
           {currentStatus === 'done'
             ? <CheckSquare className="w-4 h-4 text-green-500" />
+            : currentStatus === 'blocked'
+            ? <AlertCircle className="w-4 h-4 text-red-500" />
             : <Circle className="w-4 h-4" />}
         </button>
         <div className="flex-1 min-w-0">
@@ -167,25 +180,22 @@ function TaskCard({ task, onStatusChange, onDelete, currentStatus }) {
             <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{task.description}</p>
           )}
           <div className="flex flex-wrap items-center gap-1.5 mt-2">
-            <span className={cn("text-xs px-2 py-0.5 rounded-full border font-medium", priorityCfg.color)}>
-              {priorityCfg.label}
-            </span>
-            {task.due_date && (
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
+            {dueDate && (
+              <span className={cn("text-xs px-2 py-0.5 rounded-full border font-medium flex items-center gap-1", dueCfg.color)}>
                 <Clock className="w-3 h-3" />
-                {format(new Date(task.due_date), 'MMM d')}
+                {format(dueDate, 'MMM d')}
               </span>
             )}
-            {task.assignee_email && (
+            {task.assigneeId && (
               <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <User className="w-3 h-3" />
-                {task.assignee_email.split('@')[0]}
+                {task.assigneeId.email?.split('@')[0]}
               </span>
             )}
           </div>
         </div>
         <button
-          onClick={() => onDelete(task.id)}
+          onClick={() => onDelete(task._id)}
           className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all shrink-0"
         >
           <Trash2 className="w-3.5 h-3.5" />

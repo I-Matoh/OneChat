@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,11 +24,11 @@ export default function Settings() {
 
   const { data: workspaces = [] } = useQuery({
     queryKey: ['workspaces'],
-    queryFn: () => base44.entities.Workspace.list(),
+    queryFn: () => api.workspaces.list(),
   });
 
-  const workspace = workspaces.find(w => w.id === currentWorkspaceId);
-  const isOwner = workspace?.owner_email === user?.email;
+  const workspace = workspaces.find(w => w._id === currentWorkspaceId);
+  const isOwner = workspace?.ownerId === user?.id;
 
   if (!workspace) {
     return (
@@ -98,7 +99,7 @@ function WorkspaceTab({ workspace, queryClient }) {
 
   const handleSave = async () => {
     setSaving(true);
-    await base44.entities.Workspace.update(workspace.id, { name, description });
+    await api.workspaces.update(workspace._id, { name, description });
     queryClient.invalidateQueries({ queryKey: ['workspaces'] });
     setSaving(false);
     setSaved(true);
@@ -110,7 +111,7 @@ function WorkspaceTab({ workspace, queryClient }) {
 
   const handleIconSave = async (newIcon) => {
     setIcon(newIcon);
-    await base44.entities.Workspace.update(workspace.id, { icon: newIcon });
+    await api.workspaces.update(workspace._id, { icon: newIcon });
     queryClient.invalidateQueries({ queryKey: ['workspaces'] });
   };
 
@@ -172,7 +173,7 @@ function WorkspaceTab({ workspace, queryClient }) {
           size="sm"
           onClick={async () => {
             if (confirm(`Delete workspace "${workspace.name}"? This cannot be undone.`)) {
-              await base44.entities.Workspace.delete(workspace.id);
+              await api.workspaces.delete(workspace._id);
               window.location.href = '/';
             }
           }}
@@ -189,24 +190,25 @@ function MembersTab({ workspace, user, queryClient }) {
   const [inviting, setInviting] = useState(false);
   const [inviteError, setInviteError] = useState('');
 
-  const members = workspace.member_emails || [];
+  const members = workspace.members || [];
 
   const handleInvite = async () => {
     if (!inviteEmail.trim()) return;
     setInviting(true);
     setInviteError('');
-    const updatedMembers = [...new Set([...members, inviteEmail.trim()])];
-    await base44.entities.Workspace.update(workspace.id, { member_emails: updatedMembers });
+    const currentEmails = members.map(m => m.userId?.email).filter(Boolean);
+    const updatedMembers = [...new Set([...currentEmails, inviteEmail.trim()])];
+    await api.workspaces.update(workspace._id, { memberEmails: updatedMembers });
     queryClient.invalidateQueries({ queryKey: ['workspaces'] });
     setInviteEmail('');
     setInviting(false);
   };
 
-  const handleRemove = async (email) => {
-    if (email === workspace.owner_email) return;
-    if (!confirm(`Remove ${email} from the workspace?`)) return;
-    const updatedMembers = members.filter(m => m !== email);
-    await base44.entities.Workspace.update(workspace.id, { member_emails: updatedMembers });
+  const handleRemove = async (memberUserId) => {
+    if (memberUserId === workspace.ownerId) return;
+    if (!confirm(`Remove this member from the workspace?`)) return;
+    const updatedMembers = members.filter(m => m.userId !== memberUserId);
+    await api.workspaces.update(workspace._id, { members: updatedMembers });
     queryClient.invalidateQueries({ queryKey: ['workspaces'] });
   };
 
@@ -235,8 +237,10 @@ function MembersTab({ workspace, user, queryClient }) {
           Members <span className="text-muted-foreground font-normal">({members.length})</span>
         </h2>
         <div className="space-y-3">
-          {members.map(email => (
-            <div key={email} className="flex items-center gap-3">
+          {members.map(member => {
+            const email = member.userId?.email || '';
+            return (
+            <div key={member.userId} className="flex items-center gap-3">
               <Avatar className="w-8 h-8 shrink-0">
                 <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
                   {email[0]?.toUpperCase()}
@@ -245,12 +249,12 @@ function MembersTab({ workspace, user, queryClient }) {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-foreground truncate">{email}</p>
               </div>
-              {email === workspace.owner_email && (
+              {member.role === 'owner' && (
                 <Badge variant="outline" className="text-xs shrink-0">Owner</Badge>
               )}
-              {email !== workspace.owner_email && (
+              {member.role !== 'owner' && (
                 <button
-                  onClick={() => handleRemove(email)}
+                  onClick={() => handleRemove(member.userId)}
                   className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
                   title="Remove member"
                 >
@@ -258,7 +262,7 @@ function MembersTab({ workspace, user, queryClient }) {
                 </button>
               )}
             </div>
-          ))}
+            )})}
         </div>
       </Card>
     </div>

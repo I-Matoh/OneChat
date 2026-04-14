@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Sparkles, Send, Loader2, User, Trash2 } from 'lucide-react';
@@ -26,13 +27,13 @@ export default function AIAssistant() {
 
   const { data: pages = [] } = useQuery({
     queryKey: ['pages', currentWorkspaceId],
-    queryFn: () => base44.entities.Page.filter({ workspace_id: currentWorkspaceId, is_archived: false }),
+    queryFn: () => api.pages.list(currentWorkspaceId),
     enabled: !!currentWorkspaceId,
   });
 
   const { data: tasks = [] } = useQuery({
     queryKey: ['tasks', currentWorkspaceId],
-    queryFn: () => base44.entities.Task.filter({ workspace_id: currentWorkspaceId }),
+    queryFn: () => api.tasks.list(currentWorkspaceId),
     enabled: !!currentWorkspaceId,
   });
 
@@ -49,9 +50,9 @@ export default function AIAssistant() {
     setMessages(newMessages);
     setLoading(true);
 
-    const pagesSummary = pages.slice(0, 5).map(p => `- "${p.title}" (${p.page_type})`).join('\n');
+    const pagesSummary = pages.slice(0, 5).map(p => `- "${p.title}"`).join('\n');
     const tasksSummary = tasks.filter(t => t.status !== 'done').slice(0, 10).map(t =>
-      `- "${t.title}" [${t.priority} priority, ${t.status}${t.assignee_email ? `, assigned to ${t.assignee_email}` : ''}]`
+      `- "${t.title}" [${t.status}${t.assigneeId?.email ? `, assigned to ${t.assigneeId.email}` : ''}]`
     ).join('\n');
 
     const systemContext = `You are an AI assistant for a team workspace called OneChat.
@@ -62,13 +63,13 @@ ${pagesSummary || 'No pages yet'}
 Open Tasks (${tasks.filter(t => t.status !== 'done').length} total):
 ${tasksSummary || 'No open tasks'}
 
-Current user: ${user?.full_name || user?.email}
+Current user: ${user?.name || user?.email}
 Be concise, helpful and actionable. Format responses with markdown when helpful.`;
 
     const prompt = `${systemContext}\n\nConversation so far:\n${newMessages.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n')}\n\nAssistant:`;
 
-    const response = await base44.integrations.Core.InvokeLLM({ prompt });
-    setMessages(prev => [...prev, { role: 'assistant', content: response }]);
+    const response = await api.ai.chat(prompt, 'chat');
+    setMessages(prev => [...prev, { role: 'assistant', content: response.text || response }]);
     setLoading(false);
   };
 

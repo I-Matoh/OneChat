@@ -19,13 +19,13 @@ export default function Chat() {
 
   const { data: conversations = [] } = useQuery({
     queryKey: ['conversations', currentWorkspaceId],
-    queryFn: () => fetch(`/api/chat/conversations?workspaceId=${currentWorkspaceId}`).then(r => r.json()),
+    queryFn: () => fetch(`/chat/conversations?workspaceId=${currentWorkspaceId}`).then(r => r.json()),
     enabled: !!currentWorkspaceId,
   });
 
   const { data: messages = [] } = useQuery({
     queryKey: ['messages', selectedConvId],
-    queryFn: () => fetch(`/api/chat/messages?conversationId=${selectedConvId}`).then(r => r.json()),
+    queryFn: () => fetch(`/chat/messages?conversationId=${selectedConvId}`).then(r => r.json()),
     enabled: !!selectedConvId,
     refetchInterval: 3000,
   });
@@ -61,7 +61,7 @@ export default function Chat() {
     queryClient.setQueryData(['messages', selectedConvId], (old = []) => [...old, optimisticMsg]);
 
     try {
-      await fetch('/api/chat/messages', {
+      await fetch('/chat/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -73,7 +73,7 @@ export default function Chat() {
           message_type: 'text',
         })
       });
-      await fetch(`/api/chat/conversations/${selectedConvId}`, {
+      await fetch(`/chat/conversations/${selectedConvId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

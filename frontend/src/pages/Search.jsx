@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useOutletContext, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import api from '@/lib/api';
 import { Search as SearchIcon, FileText, MessageSquare, CheckSquare, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -13,20 +14,20 @@ export default function Search() {
 
   const { data: pages = [] } = useQuery({
     queryKey: ['pages', currentWorkspaceId],
-    queryFn: () => base44.entities.Page.filter({ workspace_id: currentWorkspaceId, is_archived: false }),
+    queryFn: () => api.pages.list(currentWorkspaceId),
     enabled: !!currentWorkspaceId,
   });
 
   const { data: tasks = [] } = useQuery({
     queryKey: ['tasks', currentWorkspaceId],
-    queryFn: () => base44.entities.Task.filter({ workspace_id: currentWorkspaceId }),
+    queryFn: () => api.tasks.list(currentWorkspaceId),
     enabled: !!currentWorkspaceId,
   });
 
   const { data: conversations = [] } = useQuery({
-    queryKey: ['conversations', currentWorkspaceId],
-    queryFn: () => base44.entities.Conversation.filter({ workspace_id: currentWorkspaceId }),
-    enabled: !!currentWorkspaceId,
+    queryKey: ['conversations'],
+    queryFn: () => api.conversations.list(),
+    enabled: true,
   });
 
   const q = query.toLowerCase().trim();
@@ -34,7 +35,7 @@ export default function Search() {
   const results = q ? [
     ...( (filter === 'all' || filter === 'pages') ? pages.filter(p =>
       p.title?.toLowerCase().includes(q) || p.content?.toLowerCase().includes(q)
-    ).map(p => ({ type: 'page', item: p, href: `/pages/${p.id}?w=${currentWorkspaceId}` })) : []),
+    ).map(p => ({ type: 'page', item: p, href: `/pages/${p._id}?w=${currentWorkspaceId}` })) : []),
     ...( (filter === 'all' || filter === 'tasks') ? tasks.filter(t =>
       t.title?.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q)
     ).map(t => ({ type: 'task', item: t, href: `/tasks?w=${currentWorkspaceId}` })) : []),
@@ -120,7 +121,7 @@ export default function Search() {
                       {type === 'channel' ? `#${item.name}` : item.title || item.name}
                     </p>
                     <p className="text-xs text-muted-foreground capitalize">
-                      {type} • {formatDistanceToNow(new Date(item.updated_date), { addSuffix: true })}
+                      {type} • {formatDistanceToNow(new Date(item.updatedAt), { addSuffix: true })}
                     </p>
                   </div>
                 </div>

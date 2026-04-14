@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
+import api from '@/lib/api';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -13,7 +13,7 @@ import CreateWorkspaceModal from '@/components/workspace/CreateWorkspaceModal';
 import WorkspaceDrawer from './WorkspaceDrawer';
 import DeleteAccountDialog from './DeleteAccountDialog';
 
-export default function AppSidebar({ user, currentWorkspaceId, onWorkspaceChange, onClose }) {
+export default function AppSidebar({ user, currentWorkspaceId, onWorkspaceChange, onClose, onLogout }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
@@ -21,12 +21,12 @@ export default function AppSidebar({ user, currentWorkspaceId, onWorkspaceChange
 
   const { data: workspaces = [] } = useQuery({
     queryKey: ['workspaces'],
-    queryFn: () => base44.entities.Workspace.list(),
+    queryFn: () => api.workspaces.list(),
   });
 
   const { data: pages = [] } = useQuery({
     queryKey: ['pages', currentWorkspaceId],
-    queryFn: () => base44.entities.Page.filter({ workspace_id: currentWorkspaceId, is_archived: false }),
+    queryFn: () => api.pages.list(currentWorkspaceId),
     enabled: !!currentWorkspaceId,
   });
 
@@ -40,7 +40,7 @@ export default function AppSidebar({ user, currentWorkspaceId, onWorkspaceChange
     { icon: Settings,      label: 'Settings',      path: '/settings' },
   ];
 
-  const topLevelPages = pages.filter(p => !p.parent_page_id);
+  const topLevelPages = pages.filter(p => !p.parentId);
 
   return (
     <>
@@ -86,10 +86,10 @@ export default function AppSidebar({ user, currentWorkspaceId, onWorkspaceChange
               {pagesExpanded && (
                 <div className="mt-0.5 space-y-0.5">
                   {topLevelPages.map(page => (
-                    <Link key={page.id} to={`/pages/${page.id}?w=${currentWorkspaceId}`}>
+                    <Link key={page._id} to={`/pages/${page._id}?w=${currentWorkspaceId}`}>
                       <div className={cn(
                         "flex items-center gap-2 px-2.5 rounded-md text-sm transition-colors cursor-pointer ml-2 select-none min-h-[36px]",
-                        location.pathname === `/pages/${page.id}`
+                        location.pathname === `/pages/${page._id}`
                           ? "bg-sidebar-accent text-sidebar-primary"
                           : "text-sidebar-foreground hover:bg-sidebar-accent/50"
                       )}>
@@ -115,15 +115,15 @@ export default function AppSidebar({ user, currentWorkspaceId, onWorkspaceChange
           <div className="flex items-center gap-2 mb-1">
             <Avatar className="w-7 h-7 shrink-0">
               <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
-                {user?.full_name?.[0] || user?.email?.[0] || 'U'}
+                {user?.name?.[0] || user?.email?.[0] || 'U'}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold truncate text-sidebar-foreground">{user?.full_name || 'User'}</p>
+              <p className="text-xs font-semibold truncate text-sidebar-foreground">{user?.name || 'User'}</p>
               <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
             </div>
             <button
-              onClick={() => base44.auth.logout()}
+              onClick={onLogout}
               className="text-muted-foreground hover:text-foreground transition-colors select-none min-w-[44px] min-h-[44px] flex items-center justify-center"
               title="Logout"
             >
@@ -138,7 +138,7 @@ export default function AppSidebar({ user, currentWorkspaceId, onWorkspaceChange
         <CreateWorkspaceModal
           user={user}
           onClose={() => setShowCreateWorkspace(false)}
-          onCreated={(ws) => { onWorkspaceChange(ws.id); setShowCreateWorkspace(false); }}
+          onCreated={(ws) => { onWorkspaceChange(ws._id); setShowCreateWorkspace(false); }}
         />
       )}
     </>

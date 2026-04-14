@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useOutletContext, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import ReactQuill from 'react-quill';
@@ -42,9 +43,8 @@ export default function PageEditor() {
 
   const { data: page } = useQuery({
     queryKey: ['page', pageId],
-    queryFn: () => base44.entities.Page.filter({ id: pageId }),
+    queryFn: () => api.pages.get(pageId),
     enabled: !isNew && !!pageId,
-    select: (data) => data[0],
   });
 
   useEffect(() => {
@@ -52,7 +52,7 @@ export default function PageEditor() {
       setTitle(page.title || 'Untitled');
       setContent(page.content || '');
       setIcon(page.icon || '📄');
-      setPageType(page.page_type || 'doc');
+      setPageType(page.pageType || 'doc');
     }
   }, [page]);
 
@@ -60,23 +60,18 @@ export default function PageEditor() {
     if (!currentWorkspaceId) return;
     setSaving(true);
     if (isNew) {
-      const newPage = await base44.entities.Page.create({
-        workspace_id: currentWorkspaceId,
+      const newPage = await api.pages.create(currentWorkspaceId, {
         title: title || 'Untitled',
         content,
         icon,
-        page_type: pageType,
-        last_edited_by: user?.email,
       });
       queryClient.invalidateQueries({ queryKey: ['pages', currentWorkspaceId] });
-      navigate(`/pages/${newPage.id}?w=${currentWorkspaceId}`, { replace: true });
+      navigate(`/pages/${newPage._id}?w=${currentWorkspaceId}`, { replace: true });
     } else {
-      await base44.entities.Page.update(pageId, {
+      await api.pages.update(pageId, {
         title: title || 'Untitled',
         content,
         icon,
-        page_type: pageType,
-        last_edited_by: user?.email,
       });
       queryClient.invalidateQueries({ queryKey: ['pages', currentWorkspaceId] });
       queryClient.invalidateQueries({ queryKey: ['page', pageId] });
@@ -87,7 +82,7 @@ export default function PageEditor() {
 
   const handleDelete = async () => {
     if (!confirm('Delete this page?')) return;
-    await base44.entities.Page.update(pageId, { is_archived: true });
+    await api.pages.update(pageId, { isArchived: true });
     queryClient.invalidateQueries({ queryKey: ['pages', currentWorkspaceId] });
     navigate(`/?w=${currentWorkspaceId}`);
   };

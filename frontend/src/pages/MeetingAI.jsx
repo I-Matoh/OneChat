@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
+import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -90,8 +91,8 @@ export default function MeetingAI() {
     const text = transcript.trim();
     if (!text) return;
     setSummarizing(true);
-    const result = await base44.integrations.Core.InvokeLLM({
-      prompt: `You are an expert meeting assistant. Analyze the following meeting transcript and provide:
+    const result = await api.ai.chat(
+      `You are an expert meeting assistant. Analyze the following meeting transcript and provide:
 
 1. **Meeting Summary** — A concise 2-3 sentence overview of what was discussed.
 2. **Key Points** — Bullet list of the most important topics and decisions.
@@ -102,9 +103,9 @@ Be concise and actionable. Format using markdown.
 
 Transcript:
 ${text}`,
-      model: 'claude_sonnet_4_6',
-    });
-    setSummary(result);
+      'meeting'
+    );
+    setSummary(result.text || result);
     setSummarizing(false);
   };
 
