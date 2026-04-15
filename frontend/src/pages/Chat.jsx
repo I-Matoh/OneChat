@@ -8,6 +8,16 @@ import { Hash, Plus, Send, MessageSquare, Users } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
+const API = import.meta.env.VITE_API_URL || '';
+
+function getAuthHeaders() {
+  const auth = JSON.parse(localStorage.getItem('onechat_auth') || '{}');
+  return {
+    'Content-Type': 'application/json',
+    ...(auth?.token && { Authorization: `Bearer ${auth.token}` })
+  };
+}
+
 export default function Chat() {
   const { user, currentWorkspaceId } = useOutletContext();
   const [selectedConvId, setSelectedConvId] = useState(null);
@@ -19,13 +29,17 @@ export default function Chat() {
 
   const { data: conversations = [] } = useQuery({
     queryKey: ['conversations', currentWorkspaceId],
-    queryFn: () => fetch(`/chat/conversations?workspaceId=${currentWorkspaceId}`).then(r => r.json()),
+    queryFn: () => fetch(`${API}/chat/conversations?workspaceId=${currentWorkspaceId}`, {
+      headers: getAuthHeaders()
+    }).then(r => r.json()),
     enabled: !!currentWorkspaceId,
   });
 
   const { data: messages = [] } = useQuery({
     queryKey: ['messages', selectedConvId],
-    queryFn: () => fetch(`/chat/messages?conversationId=${selectedConvId}`).then(r => r.json()),
+    queryFn: () => fetch(`${API}/chat/conversations/${selectedConvId}/messages`, {
+      headers: getAuthHeaders()
+    }).then(r => r.json()),
     enabled: !!selectedConvId,
     refetchInterval: 3000,
   });
@@ -50,35 +64,23 @@ export default function Chat() {
 
     const optimisticMsg = {
       id: `optimistic-${Date.now()}`,
-      conversation_id: selectedConvId,
-      workspace_id: currentWorkspaceId,
-      sender_email: user?.email,
-      sender_name: user?.full_name || user?.email,
+      conversationId: selectedConvId,
+      senderId: user?.id,
+      senderName: user?.name || user?.email,
+      senderEmail: user?.email,
       content: text,
-      message_type: 'text',
-      created_date: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      status: 'sent',
     };
     queryClient.setQueryData(['messages', selectedConvId], (old = []) => [...old, optimisticMsg]);
 
     try {
-      await fetch('/chat/messages', {
+      await fetch(`${API}/chat/messages`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
-          conversation_id: selectedConvId,
-          workspace_id: currentWorkspaceId,
-          sender_email: user?.email,
-          sender_name: user?.full_name || user?.email,
+          conversationId: selectedConvId,
           content: text,
-          message_type: 'text',
-        })
-      });
-      await fetch(`/chat/conversations/${selectedConvId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          last_message: text,
-          last_message_at: new Date().toISOString(),
         })
       });
     } catch (error) {
@@ -144,10 +146,10 @@ export default function Chat() {
                 </div>
               ) : (
                 messages.map((msg, i) => {
-                  const isMe = msg.sender_email === user?.email;
+                  const isMe = msg.senderEmail === user?.email;
                   const prevMsg = messages[i - 1];
-                  const sameAuthor = prevMsg?.sender_email === msg.sender_email &&
-                    (new Date(msg.created_date) - new Date(prevMsg.created_date)) < 300000;
+                  const sameAuthor = prevMsg?.senderEmail === msg.senderEmail &&
+                    (new Date(msg.createdAt) - new Date(prevMsg.createdAt)) < 300000;
                   return (
                     <MessageBubble key={msg.id} msg={msg} isMe={isMe} compact={sameAuthor} />
                   );
@@ -197,7 +199,7 @@ function MessageBubble({ msg, isMe, compact }) {
       {!compact ? (
         <Avatar className="w-8 h-8 shrink-0 mt-0.5">
           <AvatarFallback className={cn("text-xs font-semibold", isMe ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
-            {(msg.sender_name || msg.sender_email)?.[0]?.toUpperCase()}
+            {(msg.senderName || msg.senderEmail)?.[0]?.toUpperCase()}
           </AvatarFallback>
         </Avatar>
       ) : (
@@ -206,8 +208,8 @@ function MessageBubble({ msg, isMe, compact }) {
       <div className={cn("max-w-[70%]", isMe && "items-end flex flex-col")}>
         {!compact && (
           <div className={cn("flex items-baseline gap-2 mb-1", isMe && "flex-row-reverse")}>
-            <span className="text-xs font-semibold text-foreground">{msg.sender_name || msg.sender_email}</span>
-            <span className="text-xs text-muted-foreground">{format(new Date(msg.created_date), 'HH:mm')}</span>
+            <span className="text-xs font-semibold text-foreground">{msg.senderName || msg.senderEmail}</span>
+            <span className="text-xs text-muted-foreground">{format(new Date(msg.createdAt), 'HH:mm')}</span>
           </div>
         )}
         <div className={cn(
