@@ -1,4 +1,11 @@
 /**
+ * Application Entry / Server Initialization
+ * 
+ * Architecture Note:
+ * The index.js acts as the definitive start script. It bootstraps the environment,
+ * strictly enforces essential environment variables (JWT_SECRET entropy), provisions 
+ * the MongoDB connection, and attaches the Socket.IO overlay to the Express HTTP Server.
+ * 
  * OneChat Backend - Main Entry Point
  * 
  * Express server with Socket.IO for real-time collaboration.

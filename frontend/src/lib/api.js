@@ -1,3 +1,12 @@
+/**
+ * Core API Client Interceptor
+ * 
+ * Architecture Note:
+ * This singleton utility encapsulates the native Fetch API, pre-configuring all global
+ * networking defaults, error boundary catching, and JWT token injection. By confining
+ * all REST API calls into a single dictionary object (`api`), the rest of the React
+ * application doesn't have to worry about URLs, token management, or headers.
+ */
 const API = import.meta.env.VITE_API_URL || '';
 
 function getStoredToken() {

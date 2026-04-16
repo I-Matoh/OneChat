@@ -6,6 +6,14 @@
  * Rate limited to prevent abuse.
  */
 
+/**
+ * AI Domain Controllers
+ * 
+ * Architecture Note:
+ * This layer parses raw HTTP requests, validates permissions (e.g., Editor roles on workspaces),
+ * implements discrete Rate Limiting to prevent LLM abuse, and tracks API usage analytics 
+ * before passing clean payloads to the business logic orchestration layer (ai.service).
+ */
 const { Router } = require('express');
 const { authMiddleware } = require('../middleware/auth');
 const { rateLimiter } = require('../middleware/rateLimiter');

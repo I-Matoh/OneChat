@@ -10,8 +10,8 @@ node_modules/
 dist/
 build/
 
-.kilo
 .agent
+.kilo
 .claude
 
 .cursor

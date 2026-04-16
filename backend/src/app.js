@@ -1,3 +1,12 @@
+/**
+ * Core Express Application Factory
+ * 
+ * Architecture Note:
+ * We use a factory function (`createApp`) rather than a singleton to allow deterministic,
+ * isolated instances of the Express app during test execution. 
+ * This file registers all middleware chains (CORS, Security Headers, Logging) and maps
+ * the domain-driven route controllers to their respective base paths.
+ */
 require('dotenv').config();
 
 const express = require('express');

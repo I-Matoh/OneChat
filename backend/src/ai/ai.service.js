@@ -1,24 +1,30 @@
 /**
- * AI Service
+ * AI Service Layer
  * 
- * Provides text generation and action extraction capabilities.
- * Uses Groq API as primary provider with local fallback for reliability.
- * 
- * Fallback processing includes:
- *   - Sentence splitting and key point extraction
- *   - Action item detection via pattern matching
- *   - Keyword extraction using frequency analysis
+ * Architecture Note:
+ * This module encapsulates all interactions with Large Language Models (LLMs).
+ * We default to the `groq-sdk` for ultra-fast, low-latency inference using Llama models.
+ * A fallback mechanism is provided to ensure continuous availability if the LLM API is unreachable,
+ * which is critical for resilient enterprise applications.
  */
 
+const Groq = require('groq-sdk');
+
+// Initialize the Groq client. It automatically picks up process.env.GROQ_API_KEY
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
+
 /**
- * Normalize text input by trimming whitespace.
+ * Normalizes text input defensively to prevent type errors on missing or invalid data.
+ * @param {any} value - The input to normalize
+ * @returns {string} - Cleaned, trimmed string
  */
 function normalizeText(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
 /**
- * Split text into sentences for analysis.
+ * Splits prose into individual sentences based on punctuation.
+ * Used primarily by the fallback analyzer for basic text processing without an ML model.
  */
 function splitSentences(text) {
   return text
@@ -29,7 +35,8 @@ function splitSentences(text) {
 }
 
 /**
- * Extract top keywords from text, filtering common stop words.
+ * Core primitive for extracting relevant keywords using frequency analysis.
+ * Filters out common English stop words to maintain high signal-to-noise ratio.
  */
 function topKeywords(text, limit = 6) {
   const stopWords = new Set([
@@ -41,11 +48,13 @@ function topKeywords(text, limit = 6) {
   ]);
 
   const counts = new Map();
+  // Using a regex to extract word-like segments composed of a-z, 0-9, and dashes.
   for (const raw of text.toLowerCase().match(/[a-z][a-z0-9_-]{2,}/g) || []) {
     if (stopWords.has(raw)) continue;
     counts.set(raw, (counts.get(raw) || 0) + 1);
   }
 
+  // Sort frequencies descending and return the top keywords natively.
   return [...counts.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, limit)
@@ -53,8 +62,8 @@ function topKeywords(text, limit = 6) {
 }
 
 /**
- * Extract actionable items from text.
- * Looks for bullet points, todo keywords, and action-oriented phrases.
+ * Extracts action items using regex pattern matching when LLM extraction is unavailable.
+ * Matches bullet points or specific action-oriented prefixes.
  */
 function extractActionItems(text) {
   const lines = text
@@ -71,8 +80,9 @@ function extractActionItems(text) {
 }
 
 /**
- * Local fallback summarization when AI API unavailable.
- * Extracts key sentences, action items, and keywords from content.
+ * Fallback summary generator.
+ * Used when the Groq completion API fails or times out. Provides a functional summary
+ * and ensures the application doesn't hard-crash.
  */
 function fallbackSummary(prompt, content, contextType = 'general') {
   const text = normalizeText(content);
@@ -95,46 +105,38 @@ function fallbackSummary(prompt, content, contextType = 'general') {
 }
 
 /**
- * Call Groq Chat API for text generation.
- * Returns null if API key missing or request fails.
+ * Executes a chat completion query against Groq API via their official SDK.
+ * Handles timeouts and model selection implicitly.
  */
 async function callGroqChat(prompt, { temperature = 0.2, maxTokens = 700 } = {}) {
-  const apiKey = process.env.GROQ_API_KEY;
-  const model = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
-  if (!apiKey) return null;
+  // Defensive check: if no API key is provided, fail-fast to trigger fallback processing
+  if (!process.env.GROQ_API_KEY) return null;
 
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      temperature,
-      max_tokens: maxTokens,
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a collaboration assistant. Return concise, practical output.',
-        },
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-    }),
+  const model = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+
+  const chatCompletion = await groq.chat.completions.create({
+    messages: [
+      {
+        role: 'system',
+        content: 'You are a highly efficient collaboration assistant. Return concise, practical, and highly accurate output formatted in Markdown where appropriate.',
+      },
+      {
+        role: 'user',
+        content: prompt,
+      },
+    ],
+    model: model,
+    temperature: temperature,
+    max_tokens: maxTokens,
   });
 
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Groq request failed: ${response.status} ${body.slice(0, 240)}`);
-  }
-
-  const data = await response.json();
-  return data?.choices?.[0]?.message?.content?.trim() || '';
+  return chatCompletion.choices[0]?.message?.content?.trim() || '';
 }
 
+/**
+ * Orchestrator for generating conversational AI text.
+ * Combines system context with user prompts and executes the LLM pipeline, falling back sequentially if needed.
+ */
 async function generateAssistantText(prompt, content, contextType) {
   const mergedPrompt = [
     `Context type: ${contextType || 'general'}`,
@@ -148,27 +150,38 @@ async function generateAssistantText(prompt, content, contextType) {
   try {
     const groqText = await callGroqChat(mergedPrompt);
     if (groqText) return { text: groqText, provider: 'groq' };
-  } catch {
-    // Graceful fallback below
+  } catch (err) {
+    // Graceful fallback on networking or permission errors
+    console.warn('[AI Service] Groq API Failed, using local fallback analyzer. Error:', err.message);
   }
 
+  // Fallback executed synchronously if API call fails
   return { text: fallbackSummary(prompt, content, contextType), provider: 'fallback' };
 }
 
+/**
+ * Specialized LLM orchestrator for extracting discrete action items.
+ * Enforces highly structured output from the LLM to facilitate seamless ingestion into the database (Tasks).
+ */
 async function extractActionsWithAI(text) {
+  // Pre-calculate fallback in case it's needed
   const fallback = extractActionItems(text);
 
   try {
     const prompt = [
       'Extract actionable tasks from this text.',
-      'Return one task per line, no numbering, no markdown, max 15 tasks.',
+      'Return exactly one task per line without any numbers, markdown structures, or leading/trailing characters. Max 15 tasks.',
       '',
-      text,
+      normalizeText(text),
     ].join('\n');
 
+    // Using lower temperature (0.1) for strictly structured, deterministic extraction
     const groqText = await callGroqChat(prompt, { temperature: 0.1, maxTokens: 500 });
+    
+    // Bubble up to fallback if the model returned an empty string
     if (!groqText) return { actions: fallback, provider: 'fallback' };
 
+    // Format the raw LLM string into an array, cleaning out edge-case hallucinations
     const actions = groqText
       .split('\n')
       .map((line) => line.replace(/^\s*[-*\d.)]+\s*/, '').trim())
@@ -176,8 +189,10 @@ async function extractActionsWithAI(text) {
       .slice(0, 15);
 
     if (actions.length === 0) return { actions: fallback, provider: 'fallback' };
+    
     return { actions, provider: 'groq' };
-  } catch {
+  } catch (err) {
+    console.warn('[AI Service] Action Extraction API Failed, using local fallback. Error:', err.message);
     return { actions: fallback, provider: 'fallback' };
   }
 }

@@ -1,3 +1,16 @@
+/**
+ * Root Application Entry / Core Router
+ * 
+ * Architecture Note:
+ * This file serves as the topological root of the React DOM tree. It orchestrates all
+ * the global context providers necessary for the application to function:
+ * 1. AuthProvider: Manages the JWT lifecycle and global user state.
+ * 2. QueryClientProvider: TanStack React Query for aggressive server-state caching.
+ * 3. Router: Client-side routing via React Router DOM.
+ * 
+ * We use an inner <AuthenticatedApp /> component to conditionally render the router paths
+ * based on the resolved Auth State, keeping bundle splitting and rendering secure.
+ */
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
