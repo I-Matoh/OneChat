@@ -11,8 +11,18 @@
 const Groq = require('groq-sdk');
 
 // Initialize the Groq client. It automatically picks up process.env.GROQ_API_KEY
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
+let groqClient = null;
 
+function getGroqClient() {
+  if (!groqClient) {
+    if (!process.env.GROQ_API_KEY || process.env.GROQ_API_KEY === 'your-groq-api-key') {
+      console.warn('[AI Service] Valid GROQ_API_KEY missing from environment.');
+      return null;
+    }
+    groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  }
+  return groqClient;
+}
 /**
  * Normalizes text input defensively to prevent type errors on missing or invalid data.
  * @param {any} value - The input to normalize
@@ -110,7 +120,8 @@ function fallbackSummary(prompt, content, contextType = 'general') {
  */
 async function callGroqChat(prompt, { temperature = 0.2, maxTokens = 700 } = {}) {
   // Defensive check: if no API key is provided, fail-fast to trigger fallback processing
-  if (!process.env.GROQ_API_KEY) return null;
+  const groq = getGroqClient();
+  if (!groq) return null;
 
   const model = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 

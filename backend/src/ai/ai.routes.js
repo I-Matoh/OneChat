@@ -93,8 +93,8 @@ router.post('/extract-actions', authMiddleware, rateLimiter(60000, 20), validate
  * General purpose AI chat endpoint.
  */
 router.post('/chat', authMiddleware, rateLimiter(60000, 30), asyncHandler(async (req, res) => {
-  const { prompt, context } = req.body;
-  const result = await generateAssistantText(prompt, context || '', context || 'general');
+  const { prompt, context, contextType } = req.body;
+  const result = await generateAssistantText(prompt, context || '', contextType || 'chat');
   return res.json(result);
 }));
 

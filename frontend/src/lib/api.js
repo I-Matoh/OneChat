@@ -80,7 +80,7 @@ export const api = {
   },
 
   ai: {
-    chat: (prompt, context) => apiFetch('/ai/chat', { method: 'POST', body: JSON.stringify({ prompt, context }) }),
+    chat: (prompt, context, contextType = 'chat') => apiFetch('/ai/chat', { method: 'POST', body: JSON.stringify({ prompt, context, contextType }) }),
     extractActions: (text) => apiFetch('/ai/extract-actions', { method: 'POST', body: JSON.stringify({ text }) }),
   },
 };
