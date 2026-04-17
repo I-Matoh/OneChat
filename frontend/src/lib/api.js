@@ -69,7 +69,7 @@ export const api = {
   },
 
   conversations: {
-    list: () => apiFetch('/chat/conversations'),
+    list: (workspaceId) => apiFetch(workspaceId ? `/chat/conversations?workspaceId=${workspaceId}` : '/chat/conversations'),
     create: (data) => apiFetch('/chat/conversations', { method: 'POST', body: JSON.stringify(data) }),
     getMessages: (id, page = 1, limit = 50) => apiFetch(`/chat/conversations/${id}/messages?page=${page}&limit=${limit}`),
   },

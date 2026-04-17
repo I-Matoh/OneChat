@@ -5,30 +5,31 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { formatDistanceToNow } from 'date-fns';
 import ActivityFeed from '@/components/home/ActivityFeed';
+import api from '@/lib/api';
 
 export default function Home() {
   const { user, currentWorkspaceId } = useOutletContext();
 
   const { data: pages = [] } = useQuery({
     queryKey: ['pages', currentWorkspaceId],
-    queryFn: () => fetch(`/pages?workspaceId=${currentWorkspaceId}`).then(r => r.json()),
+    queryFn: () => api.pages.list(currentWorkspaceId),
     enabled: !!currentWorkspaceId,
   });
 
   const { data: tasks = [] } = useQuery({
     queryKey: ['tasks', currentWorkspaceId],
-    queryFn: () => fetch(`/tasks?workspaceId=${currentWorkspaceId}`).then(r => r.json()),
+    queryFn: () => api.tasks.list(currentWorkspaceId),
     enabled: !!currentWorkspaceId,
   });
 
   const { data: conversations = [] } = useQuery({
     queryKey: ['conversations', currentWorkspaceId],
-    queryFn: () => fetch(`/chat/conversations?workspaceId=${currentWorkspaceId}`).then(r => r.json()),
+    queryFn: () => api.conversations.list(currentWorkspaceId),
     enabled: !!currentWorkspaceId,
   });
 
-  const recentPages = [...pages].sort((a, b) => new Date(b.updated_date) - new Date(a.updated_date)).slice(0, 5);
-  const myTasks = tasks.filter(t => t.assignee_email === user?.email && t.status !== 'done').slice(0, 5);
+  const recentPages = [...pages].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)).slice(0, 5);
+  const myTasks = tasks.filter(t => t.assigneeId?.email === user?.email && t.status !== 'done').slice(0, 5);
 
   const stats = [
     { label: 'Pages', value: pages.length, icon: FileText, color: 'text-violet-500', bg: 'bg-violet-50 dark:bg-violet-500/10' },
@@ -75,12 +76,12 @@ export default function Home() {
             ) : (
               <div className="space-y-1">
                 {recentPages.map(page => (
-                  <Link key={page.id} to={`/pages/${page.id}?w=${currentWorkspaceId}`}>
+                  <Link key={page._id} to={`/pages/${page._id}?w=${currentWorkspaceId}`}>
                     <div className="flex items-center gap-2.5 p-2 rounded-md hover:bg-muted/60 transition-colors group">
                       <span className="text-base">{page.icon || '📄'}</span>
                       <span className="flex-1 text-sm truncate text-foreground">{page.title}</span>
                       <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100">
-                        {formatDistanceToNow(new Date(page.updated_date), { addSuffix: true })}
+                        {formatDistanceToNow(new Date(page.updatedAt), { addSuffix: true })}
                       </span>
                       <ArrowRight className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0" />
                     </div>
@@ -104,7 +105,7 @@ export default function Home() {
             ) : (
               <div className="space-y-1">
                 {myTasks.map(task => (
-                  <Link key={task.id} to={`/tasks?w=${currentWorkspaceId}`}>
+                  <Link key={task._id} to={`/tasks?w=${currentWorkspaceId}`}>
                     <div className="flex items-center gap-2.5 p-2 rounded-md hover:bg-muted/60 transition-colors">
                       <div className={`w-2 h-2 rounded-full shrink-0 ${
                         task.priority === 'high' ? 'bg-red-500' :
