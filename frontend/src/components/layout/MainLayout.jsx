@@ -10,7 +10,7 @@ export default function MainLayout() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const w = params.get('w');
-    if (w) setCurrentWorkspaceId(w);
+    if (w && w !== 'null' && w !== 'undefined') setCurrentWorkspaceId(w);
   }, []);
 
   return (

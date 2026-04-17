@@ -80,18 +80,18 @@ export default function Home() {
               <h2 className="font-semibold text-foreground flex items-center gap-2">
                 <FileText className="w-4 h-4 text-violet-500" /> Recent Pages
               </h2>
-              <Link to={`/pages/new?w=${currentWorkspaceId}`}>
-                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1">
+              <Link to={currentWorkspaceId ? `/pages/new?w=${currentWorkspaceId}` : '/pages/new'}>
+                <Button variant="ghost" size="sm" className="h-4 text-xs gap-1">
                   <Plus className="w-3 h-3" /> New
                 </Button>
               </Link>
             </div>
             {recentPages.length === 0 ? (
-              <EmptyState icon="📄" text="No pages yet" action="Create your first page" href={`/pages/new?w=${currentWorkspaceId}`} />
+              <EmptyState icon="📄" text="No pages yet" action="Create your first page" href={currentWorkspaceId ? `/pages/new?w=${currentWorkspaceId}` : '/pages/new'} />
             ) : (
               <div className="space-y-1">
                 {recentPages.map(page => (
-                  <Link key={page._id} to={`/pages/${page._id}?w=${currentWorkspaceId}`}>
+                  <Link key={page._id} to={currentWorkspaceId ? `/pages/${page._id}?w=${currentWorkspaceId}` : `/pages/${page._id}`}>
                     <div className="flex items-center gap-2.5 p-2 rounded-md hover:bg-muted/60 transition-colors group">
                       <span className="text-base">{page.icon || '📄'}</span>
                       <span className="flex-1 text-sm truncate text-foreground">{page.title}</span>
@@ -111,16 +111,16 @@ export default function Home() {
               <h2 className="font-semibold text-foreground flex items-center gap-2">
                 <CheckSquare className="w-4 h-4 text-green-500" /> My Tasks
               </h2>
-              <Link to={`/tasks?w=${currentWorkspaceId}`}>
-                <Button variant="ghost" size="sm" className="h-7 text-xs">View all</Button>
+              <Link to={currentWorkspaceId ? `/tasks?w=${currentWorkspaceId}` : '/tasks'}>
+                <Button variant="ghost" size="sm" className="h-4 text-xs">View all</Button>
               </Link>
             </div>
             {myTasks.length === 0 ? (
-              <EmptyState icon="✅" text="No pending tasks" action="Go to tasks" href={`/tasks?w=${currentWorkspaceId}`} />
+              <EmptyState icon="✅" text="No pending tasks" action="Go to tasks" href={currentWorkspaceId ? `/tasks?w=${currentWorkspaceId}` : '/tasks'} />
             ) : (
               <div className="space-y-1">
                 {myTasks.map(task => (
-                  <Link key={task._id} to={`/tasks?w=${currentWorkspaceId}`}>
+                  <Link key={task._id} to={currentWorkspaceId ? `/tasks?w=${currentWorkspaceId}` : '/tasks'}>
                     <div className="flex items-center gap-2.5 p-2 rounded-md hover:bg-muted/60 transition-colors">
                       <div className={`w-2 h-2 rounded-full shrink-0 ${
                         task.priority === 'high' ? 'bg-red-500' :
@@ -156,7 +156,7 @@ export default function Home() {
                 <p className="font-semibold text-foreground">AI Assistant</p>
                 <p className="text-sm text-muted-foreground">Ask questions, summarize content, extract action items</p>
               </div>
-              <Link to={`/ai?w=${currentWorkspaceId}`}>
+              <Link to={currentWorkspaceId ? `/ai?w=${currentWorkspaceId}` : '/ai'}>
                 <Button size="sm" className="gap-1.5">
                   <Sparkles className="w-3.5 h-3.5" /> Open AI
                 </Button>
