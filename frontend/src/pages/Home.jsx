@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { FileText, MessageSquare, CheckSquare, Plus, ArrowRight, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { formatDistanceToNow } from 'date-fns';
 import ActivityFeed from '@/components/home/ActivityFeed';
 import api from '@/lib/api';
@@ -10,23 +11,25 @@ import api from '@/lib/api';
 export default function Home() {
   const { user, currentWorkspaceId } = useOutletContext();
 
-  const { data: pages = [] } = useQuery({
+  const { data: pages = [], isLoading: pagesLoading } = useQuery({
     queryKey: ['pages', currentWorkspaceId],
     queryFn: () => api.pages.list(currentWorkspaceId),
     enabled: !!currentWorkspaceId,
   });
 
-  const { data: tasks = [] } = useQuery({
+  const { data: tasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['tasks', currentWorkspaceId],
     queryFn: () => api.tasks.list(currentWorkspaceId),
     enabled: !!currentWorkspaceId,
   });
 
-  const { data: conversations = [] } = useQuery({
+  const { data: conversations = [], isLoading: conversationsLoading } = useQuery({
     queryKey: ['conversations', currentWorkspaceId],
     queryFn: () => api.conversations.list(currentWorkspaceId),
     enabled: !!currentWorkspaceId,
   });
+
+  const isLoading = pagesLoading || tasksLoading || conversationsLoading;
 
   const recentPages = [...pages].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)).slice(0, 5);
   const myTasks = tasks.filter(t => t.assigneeId?.email === user?.email && t.status !== 'done').slice(0, 5);
@@ -48,15 +51,27 @@ export default function Home() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-          {stats.map(({ label, value, icon: Icon, color, bg }) => (
-            <Card key={label} className="p-4 border border-border/60 shadow-sm">
-              <div className={`w-9 h-9 rounded-lg ${bg} flex items-center justify-center mb-3`}>
-                <Icon className={`w-4.5 h-4.5 ${color}`} />
-              </div>
-              <p className="text-2xl font-bold text-foreground">{value}</p>
-              <p className="text-sm text-muted-foreground">{label}</p>
-            </Card>
-          ))}
+          {isLoading ? (
+            <>
+              {[...Array(3)].map((_, i) => (
+                <Card key={i} className="p-4 border border-border/60 shadow-sm">
+                  <Skeleton className="w-9 h-9 rounded-lg mb-3" />
+                  <Skeleton className="h-7 w-12 mb-1" />
+                  <Skeleton className="h-4 w-16" />
+                </Card>
+              ))}
+            </>
+          ) : (
+            stats.map(({ label, value, icon: Icon, color, bg }) => (
+              <Card key={label} className="p-4 border border-border/60 shadow-sm">
+                <div className={`w-9 h-9 rounded-lg ${bg} flex items-center justify-center mb-3`}>
+                  <Icon className={`w-4.5 h-4.5 ${color}`} />
+                </div>
+                <p className="text-2xl font-bold text-foreground">{value}</p>
+                <p className="text-sm text-muted-foreground">{label}</p>
+              </Card>
+            ))
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
