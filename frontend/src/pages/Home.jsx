@@ -10,6 +10,9 @@ import api from '@/lib/api';
 
 export default function Home() {
   const { user, currentWorkspaceId } = useOutletContext();
+  const firstName = (user?.name || user?.full_name || user?.email || 'there')
+    .split(' ')[0]
+    .split('@')[0];
 
   const { data: pages = [], isLoading: pagesLoading } = useQuery({
     queryKey: ['pages', currentWorkspaceId],
@@ -32,12 +35,12 @@ export default function Home() {
   const isLoading = pagesLoading || tasksLoading || conversationsLoading;
 
   const recentPages = [...pages].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)).slice(0, 5);
-  const myTasks = tasks.filter(t => t.assigneeId?.email === user?.email && t.status !== 'done').slice(0, 5);
+  const myTasks = tasks.filter((t) => t.assigneeId?.email === user?.email && t.status !== 'done').slice(0, 5);
 
   const stats = [
     { label: 'Pages', value: pages.length, icon: FileText, color: 'text-violet-500', bg: 'bg-violet-50 dark:bg-violet-500/10' },
     { label: 'Channels', value: conversations.length, icon: MessageSquare, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-500/10' },
-    { label: 'Tasks', value: tasks.filter(t => t.status !== 'done').length, icon: CheckSquare, color: 'text-green-500', bg: 'bg-green-50 dark:bg-green-500/10' },
+    { label: 'Tasks', value: tasks.filter((t) => t.status !== 'done').length, icon: CheckSquare, color: 'text-green-500', bg: 'bg-green-50 dark:bg-green-500/10' },
   ];
 
   return (
@@ -45,7 +48,7 @@ export default function Home() {
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-cal font-semibold text-foreground">
-            Good {getTimeGreeting()}, {user?.full_name?.split(' ')[0] || 'there'} 👋
+            Good {getTimeGreeting()}, {firstName} 👋
           </h1>
           <p className="text-muted-foreground mt-1">Here's what's happening in your workspace.</p>
         </div>
@@ -90,7 +93,7 @@ export default function Home() {
               <EmptyState icon="📄" text="No pages yet" action="Create your first page" href={currentWorkspaceId ? `/pages/new?w=${currentWorkspaceId}` : '/pages/new'} />
             ) : (
               <div className="space-y-1">
-                {recentPages.map(page => (
+                {recentPages.map((page) => (
                   <Link key={page._id} to={currentWorkspaceId ? `/pages/${page._id}?w=${currentWorkspaceId}` : `/pages/${page._id}`}>
                     <div className="flex items-center gap-2.5 p-2 rounded-md hover:bg-muted/60 transition-colors group">
                       <span className="text-base">{page.icon || '📄'}</span>
@@ -119,17 +122,21 @@ export default function Home() {
               <EmptyState icon="✅" text="No pending tasks" action="Go to tasks" href={currentWorkspaceId ? `/tasks?w=${currentWorkspaceId}` : '/tasks'} />
             ) : (
               <div className="space-y-1">
-                {myTasks.map(task => (
+                {myTasks.map((task) => (
                   <Link key={task._id} to={currentWorkspaceId ? `/tasks?w=${currentWorkspaceId}` : '/tasks'}>
                     <div className="flex items-center gap-2.5 p-2 rounded-md hover:bg-muted/60 transition-colors">
                       <div className={`w-2 h-2 rounded-full shrink-0 ${
-                        task.priority === 'high' ? 'bg-red-500' :
-                        task.priority === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
-                      }`} />
+                        task.priority === 'high' ? 'bg-red-500'
+                          : task.priority === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
+                      }`}
+                      />
                       <span className="flex-1 text-sm truncate">{task.title}</span>
                       <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
                         task.status === 'in_progress' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300' : 'bg-muted text-muted-foreground'
-                      }`}>{task.status === 'in_progress' ? 'In progress' : 'Todo'}</span>
+                      }`}
+                      >
+                        {task.status === 'in_progress' ? 'In progress' : 'Todo'}
+                      </span>
                     </div>
                   </Link>
                 ))}
