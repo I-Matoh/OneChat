@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer';
 import { ChevronDown, Check, Building2, Plus } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 function getWorkspaceId(workspace) {
   return workspace?._id || workspace?.id || null;
 }
 
-export default function WorkspaceDrawer({ workspaces, currentWorkspaceId, onWorkspaceChange, onCreateNew }) {
+export default function WorkspaceDrawer({ workspaces, currentWorkspaceId, onWorkspaceChange, onCreateNew, collapsed = false }) {
   const [open, setOpen] = useState(false);
   const current = workspaces.find((workspace) => getWorkspaceId(workspace) === currentWorkspaceId);
 
@@ -18,11 +19,23 @@ export default function WorkspaceDrawer({ workspaces, currentWorkspaceId, onWork
   return (
     <Drawer open={open} onOpenChange={setOpen}>
       <DrawerTrigger asChild>
-        <button className="w-full flex items-center gap-2 bg-sidebar-accent text-sidebar-foreground text-sm font-semibold rounded-md px-3 py-2 border border-sidebar-border select-none hover:bg-sidebar-accent/80 transition-colors">
-          <span className="truncate flex-1 text-left">
-            {current ? `${current.name}` : 'No workspace'}
-          </span>
-          <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+        <button
+          title={current ? current.name : 'Select workspace'}
+          className={cn(
+            'w-full flex items-center gap-2 bg-sidebar-accent text-sidebar-foreground text-sm font-semibold rounded-md border border-sidebar-border select-none hover:bg-sidebar-accent/80 transition-colors min-h-[36px]',
+            collapsed ? 'justify-center px-0' : 'px-3 py-2'
+          )}
+        >
+          {collapsed ? (
+            <Building2 className="w-4 h-4 shrink-0" />
+          ) : (
+            <>
+              <span className="truncate flex-1 text-left">
+                {current ? `${current.name}` : 'No workspace'}
+              </span>
+              <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+            </>
+          )}
         </button>
       </DrawerTrigger>
       <DrawerContent>

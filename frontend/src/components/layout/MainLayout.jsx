@@ -10,6 +10,7 @@ export default function MainLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   useSocket(token);
 
   useEffect(() => {
@@ -44,6 +45,8 @@ export default function MainLayout() {
         currentWorkspaceId={currentWorkspaceId}
         onWorkspaceChange={handleWorkspaceChange}
         onLogout={logout}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
       />
       <main className="relative flex-1 overflow-hidden">
         <div className="absolute right-4 top-3 z-20">
