@@ -9,6 +9,7 @@ const { Router } = require('express');
 const { authMiddleware } = require('../middleware/auth');
 const Message = require('../models/Message');
 const Conversation = require('../models/Conversation');
+const { getWorkspaceForUser, normalizeId } = require('../workspace/workspace.access');
 const { getGlobalIo } = require('../websocket/socketServer');
 const { logActivity } = require('../activity/activity.service');
 const { AppError, asyncHandler } = require('../middleware/errors');
@@ -21,7 +22,10 @@ const router = Router();
  * List all conversations for the authenticated user.
  */
 router.get('/conversations', authMiddleware, asyncHandler(async (req, res) => {
-  const convs = await Conversation.find({ participants: req.user.id })
+  const filter = { participants: req.user.id };
+  if (req.query.workspaceId) filter.workspaceId = req.query.workspaceId;
+
+  const convs = await Conversation.find(filter)
     .populate('participants', 'name email status')
     .sort({ updatedAt: -1 });
   res.json(convs);
@@ -32,9 +36,22 @@ router.get('/conversations', authMiddleware, asyncHandler(async (req, res) => {
  * Create a new conversation with specified participants.
  */
 router.post('/conversations', authMiddleware, validateConversationCreate, asyncHandler(async (req, res) => {
-  const { participantIds, name } = req.body;
-  const participants = [req.user.id, ...(participantIds || [])];
-  const conv = await Conversation.create({ participants, name: name || '' });
+  const { participantIds, name, workspaceId } = req.body;
+  if (!workspaceId) {
+    throw new AppError('workspaceId is required', 400, 'VALIDATION_ERROR');
+  }
+
+  const workspace = await getWorkspaceForUser(workspaceId, req.user.id);
+  if (!workspace) throw new AppError('Workspace not found', 404, 'WORKSPACE_NOT_FOUND');
+
+  const participantSet = new Set([normalizeId(req.user.id), ...(participantIds || []).map(normalizeId)]);
+  const participants = [...participantSet];
+
+  const conv = await Conversation.create({
+    workspaceId,
+    participants,
+    name: name || '',
+  });
   const populated = await conv.populate('participants', 'name email status');
 
   const io = getGlobalIo();
@@ -49,9 +66,10 @@ router.post('/conversations', authMiddleware, validateConversationCreate, asyncH
 
   await logActivity(io, {
     actorId: req.user.id,
+    workspaceId,
     type: 'conversation_created',
     message: `Created conversation "${name || 'Conversation'}"`,
-    meta: { conversationId: conv._id.toString() },
+    meta: { conversationId: conv._id.toString(), workspaceId: normalizeId(workspaceId) },
   });
 
   res.status(201).json(populated);

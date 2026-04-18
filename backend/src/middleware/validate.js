@@ -127,6 +127,7 @@ const validateAiExtractActions = validateBody(Joi.object({
 }));
 
 const validateConversationCreate = validateBody(Joi.object({
+  workspaceId: objectIdLike.optional(),
   participantIds: Joi.array().items(objectIdLike).default([]),
   name: Joi.string().trim().allow('').max(180).optional(),
 }));

@@ -61,14 +61,21 @@ test('chat, docs, workspace, page, member, and task APIs cover the critical path
   Conversation.findOne = ({ _id }) => Promise.resolve(
     state.conversations.find((item) => item._id === _id) || null
   );
-  Conversation.create = async ({ participants, name }) => {
+  Conversation.create = async ({ participants, name, workspaceId }) => {
     const conversation = {
       _id: 'conv-1',
+      workspaceId,
       participants,
       name,
       updatedAt: '2026-04-07T10:00:00.000Z',
       toObject() {
-        return { _id: this._id, participants: this.participants, name: this.name, updatedAt: this.updatedAt };
+        return {
+          _id: this._id,
+          workspaceId: this.workspaceId,
+          participants: this.participants,
+          name: this.name,
+          updatedAt: this.updatedAt,
+        };
       },
       async populate() {
         return this;
@@ -200,7 +207,7 @@ test('chat, docs, workspace, page, member, and task APIs cover the critical path
   const conversationResponse = await apiRequest(handle.baseUrl, '/chat/conversations', {
     method: 'POST',
     token,
-    body: { participantIds: ['user-2'], name: 'Roadmap' },
+    body: { workspaceId: 'ws-1', participantIds: ['user-2'], name: 'Roadmap' },
   });
   assert.equal(conversationResponse.status, 201);
   assert.equal(conversationResponse.body.name, 'Roadmap');

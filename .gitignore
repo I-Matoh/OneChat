@@ -10,10 +10,10 @@ node_modules/
 dist/
 build/
 
-.agent
-.kilo
-.claude
 
+.claude
+.kilo
+.agent
 .cursor
 .gemini
 .aider

@@ -9,6 +9,7 @@
 const mongoose = require('mongoose');
 
 const conversationSchema = new mongoose.Schema({
+  workspaceId:   { type: mongoose.Schema.Types.ObjectId, ref: 'Workspace', index: true },
   participants: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   name:         { type: String, default: '' },
   lastMessage:  { type: String, default: '' },

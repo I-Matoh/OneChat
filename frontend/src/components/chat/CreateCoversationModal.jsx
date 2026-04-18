@@ -10,9 +10,10 @@ export default function CreateConversationModal({ workspaceId, onClose, onCreate
   const [loading, setLoading] = useState(false);
 
   const handleCreate = async () => {
-    if (!name.trim()) return;
+    if (!name.trim() || !workspaceId) return;
     setLoading(true);
     const conv = await api.conversations.create({
+      workspaceId,
       participantIds: [],
       name: name.trim().toLowerCase().replace(/\s+/g, '-'),
     });
@@ -41,7 +42,7 @@ export default function CreateConversationModal({ workspaceId, onClose, onCreate
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={onClose}>Cancel</Button>
-            <Button onClick={handleCreate} disabled={!name.trim() || loading}>
+            <Button onClick={handleCreate} disabled={!name.trim() || !workspaceId || loading}>
               {loading ? 'Creating...' : 'Create Channel'}
             </Button>
           </div>
