@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Hash, Plus, Send, MessageSquare, Users } from 'lucide-react';
+import { Hash, Plus, Send, MessageSquare, Users, UserPlus } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
@@ -28,6 +28,12 @@ function normalizeSenderId(senderId) {
   return senderId._id || senderId.id || null;
 }
 
+function statusClass(status) {
+  if (status === 'online') return 'bg-emerald-500';
+  if (status === 'away') return 'bg-amber-400';
+  return 'bg-slate-400';
+}
+
 export default function Chat() {
   const { user, currentWorkspaceId } = useOutletContext();
   const { token } = useAuth();
@@ -39,6 +45,8 @@ export default function Chat() {
   const [messageText, setMessageText] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [sending, setSending] = useState(false);
+  const [joiningChannel, setJoiningChannel] = useState(false);
+  const [presenceByUserId, setPresenceByUserId] = useState({});
 
   const { data: conversations = [] } = useQuery({
     queryKey: ['conversations', currentWorkspaceId],
@@ -46,13 +54,37 @@ export default function Chat() {
     enabled: !!currentWorkspaceId,
   });
 
+  const { data: workspaceMembers = [] } = useQuery({
+    queryKey: ['workspace-members', currentWorkspaceId],
+    queryFn: () => api.workspaces.members(currentWorkspaceId),
+    enabled: !!currentWorkspaceId,
+  });
+
+  const workspaceUsersById = new Map(
+    workspaceMembers
+      .filter((member) => member?.user)
+      .map((member) => [normalizeId(member.userId), member.user])
+  );
+
+  const selectedConv = conversations.find((conversation) => getId(conversation) === selectedConvId) || null;
+  const selectedParticipants = (selectedConv?.participants || []).map((participant) => {
+    const participantId = normalizeId(participant);
+    if (participant && typeof participant === 'object' && (participant._id || participant.id)) {
+      return participant;
+    }
+    return workspaceUsersById.get(participantId) || { _id: participantId, name: 'Member', status: 'offline' };
+  });
+  const isParticipant = selectedParticipants.some((participant) => normalizeId(participant) === normalizeId(user?.id));
+
   const { data: messages = [] } = useQuery({
     queryKey: ['messages', selectedConvId],
     queryFn: () => api.conversations.getMessages(selectedConvId),
-    enabled: !!selectedConvId,
+    enabled: !!selectedConvId && isParticipant,
   });
 
-  const selectedConv = conversations.find((conversation) => getId(conversation) === selectedConvId) || null;
+  const getUserStatus = (userId, fallbackStatus = 'offline') => (
+    presenceByUserId[userId] || fallbackStatus || 'offline'
+  );
 
   useEffect(() => {
     if (!currentWorkspaceId) {
@@ -74,12 +106,36 @@ export default function Chat() {
   }, [messages]);
 
   useEffect(() => {
-    if (!socket || !connected || !selectedConvId) return undefined;
+    if (!socket || !connected || !selectedConvId || !isParticipant) return undefined;
     socket.emit('chat:join', selectedConvId);
     return () => {
       socket.emit('chat:leave', selectedConvId);
     };
-  }, [socket, connected, selectedConvId]);
+  }, [socket, connected, selectedConvId, isParticipant]);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+
+    const onPresenceInit = (users) => {
+      const next = {};
+      for (const entry of users || []) {
+        if (entry?.userId) next[entry.userId] = entry.status || 'online';
+      }
+      setPresenceByUserId(next);
+    };
+
+    const onPresenceUpdate = ({ userId, status }) => {
+      if (!userId) return;
+      setPresenceByUserId((prev) => ({ ...prev, [userId]: status || 'offline' }));
+    };
+
+    socket.on('presence:init', onPresenceInit);
+    socket.on('presence:update', onPresenceUpdate);
+    return () => {
+      socket.off('presence:init', onPresenceInit);
+      socket.off('presence:update', onPresenceUpdate);
+    };
+  }, [socket]);
 
   useEffect(() => {
     if (!socket) return undefined;
@@ -135,34 +191,35 @@ export default function Chat() {
       ));
     };
 
-    const onMessageUpdated = (payload) => {
-      if (!selectedConvId) return;
-      queryClient.setQueryData(['messages', selectedConvId], (existing = []) => (
-        existing.map((message) => (
-          getId(message) === payload._id
-            ? { ...message, ...payload }
-            : message
-        ))
-      ));
-    };
-
     socket.on('conversation:new', onConversationNew);
     socket.on('conversation:updated', onConversationUpdated);
     socket.on('message:new', onMessageNew);
     socket.on('message:status', onMessageStatus);
-    socket.on('message:updated', onMessageUpdated);
 
     return () => {
       socket.off('conversation:new', onConversationNew);
       socket.off('conversation:updated', onConversationUpdated);
       socket.off('message:new', onMessageNew);
       socket.off('message:status', onMessageStatus);
-      socket.off('message:updated', onMessageUpdated);
     };
   }, [socket, queryClient, selectedConvId, currentWorkspaceId]);
 
+  const joinSelectedChannel = async () => {
+    if (!selectedConvId || joiningChannel) return;
+    setJoiningChannel(true);
+    try {
+      const joined = await api.conversations.join(selectedConvId);
+      queryClient.setQueryData(['conversations', currentWorkspaceId], (existing = []) => (
+        existing.map((conversation) => (getId(conversation) === selectedConvId ? joined : conversation))
+      ));
+      queryClient.invalidateQueries({ queryKey: ['messages', selectedConvId] });
+    } finally {
+      setJoiningChannel(false);
+    }
+  };
+
   const sendMessage = async () => {
-    if (!messageText.trim() || !selectedConvId || sending) return;
+    if (!messageText.trim() || !selectedConvId || sending || !isParticipant) return;
     const content = messageText.trim();
     setMessageText('');
     setSending(true);
@@ -211,7 +268,7 @@ export default function Chat() {
 
   return (
     <div className="flex h-full">
-      <div className="w-44 sm:w-56 border-r border-border bg-muted/30 flex flex-col shrink-0">
+      <div className="w-56 border-r border-border bg-muted/30 flex flex-col shrink-0">
         <div className="p-3 border-b border-border flex items-center justify-between">
           <span className="text-sm font-semibold text-foreground">Channels</span>
           <button
@@ -228,21 +285,29 @@ export default function Chat() {
           ) : (
             conversations.map((conversation) => {
               const conversationId = getId(conversation);
+              const participantObjects = (conversation.participants || []).map((participant) => {
+                if (participant && typeof participant === 'object') return participant;
+                return workspaceUsersById.get(normalizeId(participant)) || { _id: normalizeId(participant), status: 'offline' };
+              });
+              const onlineCount = participantObjects.filter((participant) => getUserStatus(normalizeId(participant), participant.status) === 'online').length;
               return (
                 <button
                   key={conversationId}
                   onClick={() => setSelectedConvId(conversationId)}
                   className={cn(
-                    'w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors text-left',
+                    'w-full px-2 py-1.5 rounded-md text-sm transition-colors text-left',
                     selectedConvId === conversationId
                       ? 'bg-primary/10 text-primary font-medium'
                       : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                   )}
                 >
-                  {conversation.participants?.length === 2
-                    ? <Users className="w-3.5 h-3.5 shrink-0" />
-                    : <Hash className="w-3.5 h-3.5 shrink-0" />}
-                  <span className="truncate">{conversation.name || 'channel'}</span>
+                  <span className="flex items-center gap-2">
+                    {participantObjects.length === 2
+                      ? <Users className="w-3.5 h-3.5 shrink-0" />
+                      : <Hash className="w-3.5 h-3.5 shrink-0" />}
+                    <span className="truncate">{conversation.name || 'channel'}</span>
+                  </span>
+                  <span className="text-[11px] text-muted-foreground pl-5">{onlineCount} online</span>
                 </button>
               );
             })
@@ -250,60 +315,79 @@ export default function Chat() {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         {selectedConv ? (
           <>
-            <div className="px-5 py-3 border-b border-border flex items-center gap-2">
-              <Hash className="w-4.5 h-4.5 text-muted-foreground" />
-              <h2 className="font-semibold text-foreground">{selectedConv.name || 'channel'}</h2>
-            </div>
-
-            <div className="flex-1 overflow-y-auto scrollbar-thin p-4 space-y-4">
-              {messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-center">
-                  <MessageSquare className="w-10 h-10 text-muted-foreground/40 mb-3" />
-                  <p className="text-sm text-muted-foreground">No messages yet. Start the conversation!</p>
-                </div>
-              ) : (
-                messages.map((message, index) => {
-                  const senderId = normalizeSenderId(message.senderId);
-                  const isMe = senderId === user?.id || message.senderId === user?.id;
-                  const previousMessage = messages[index - 1];
-                  const previousSenderId = normalizeSenderId(previousMessage?.senderId);
-                  const sameAuthor = previousMessage
-                    && previousSenderId === senderId
-                    && (new Date(message.createdAt) - new Date(previousMessage.createdAt)) < 300000;
-                  return (
-                    <MessageBubble
-                      key={getId(message)}
-                      message={message}
-                      isMe={isMe}
-                      compact={sameAuthor}
-                    />
-                  );
-                })
-              )}
-              <div ref={bottomRef} />
-            </div>
-
-            <div className="p-3 border-t border-border">
-              <div className="flex items-center gap-2 bg-muted/60 rounded-xl px-3 py-2 border border-border">
-                <Input
-                  value={messageText}
-                  onChange={(event) => setMessageText(event.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={`Message #${selectedConv.name || 'channel'}`}
-                  className="border-0 bg-transparent shadow-none focus-visible:ring-0 px-0 text-sm"
-                />
-                <button
-                  onClick={sendMessage}
-                  disabled={!messageText.trim() || sending}
-                  className="w-8 h-8 flex items-center justify-center bg-primary rounded-lg text-primary-foreground disabled:opacity-40 hover:bg-primary/90 transition-colors shrink-0"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                </button>
+            <div className="px-5 py-3 border-b border-border flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <Hash className="w-4.5 h-4.5 text-muted-foreground shrink-0" />
+                <h2 className="font-semibold text-foreground truncate">{selectedConv.name || 'channel'}</h2>
               </div>
+              <span className="text-xs text-muted-foreground">{selectedParticipants.length} members</span>
             </div>
+
+            {!isParticipant ? (
+              <div className="flex-1 flex items-center justify-center p-6">
+                <div className="text-center max-w-sm">
+                  <UserPlus className="w-9 h-9 mx-auto mb-3 text-primary/80" />
+                  <p className="text-sm text-foreground font-medium">Join this channel to start chatting</p>
+                  <p className="text-xs text-muted-foreground mt-1">This channel belongs to workspace `{currentWorkspaceId}`.</p>
+                  <Button className="mt-4 gap-1.5" onClick={joinSelectedChannel} disabled={joiningChannel}>
+                    <UserPlus className="w-4 h-4" />
+                    {joiningChannel ? 'Joining...' : 'Join Channel'}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex-1 overflow-y-auto scrollbar-thin p-4 space-y-4">
+                  {messages.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-center">
+                      <MessageSquare className="w-10 h-10 text-muted-foreground/40 mb-3" />
+                      <p className="text-sm text-muted-foreground">No messages yet. Start the conversation!</p>
+                    </div>
+                  ) : (
+                    messages.map((message, index) => {
+                      const senderId = normalizeSenderId(message.senderId);
+                      const isMe = senderId === user?.id || message.senderId === user?.id;
+                      const previousMessage = messages[index - 1];
+                      const previousSenderId = normalizeSenderId(previousMessage?.senderId);
+                      const sameAuthor = previousMessage
+                        && previousSenderId === senderId
+                        && (new Date(message.createdAt) - new Date(previousMessage.createdAt)) < 300000;
+                      return (
+                        <MessageBubble
+                          key={getId(message)}
+                          message={message}
+                          isMe={isMe}
+                          compact={sameAuthor}
+                        />
+                      );
+                    })
+                  )}
+                  <div ref={bottomRef} />
+                </div>
+
+                <div className="p-3 border-t border-border">
+                  <div className="flex items-center gap-2 bg-muted/60 rounded-xl px-3 py-2 border border-border">
+                    <Input
+                      value={messageText}
+                      onChange={(event) => setMessageText(event.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder={`Message #${selectedConv.name || 'channel'}`}
+                      className="border-0 bg-transparent shadow-none focus-visible:ring-0 px-0 text-sm"
+                    />
+                    <button
+                      onClick={sendMessage}
+                      disabled={!messageText.trim() || sending}
+                      className="w-8 h-8 flex items-center justify-center bg-primary rounded-lg text-primary-foreground disabled:opacity-40 hover:bg-primary/90 transition-colors shrink-0"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center">
@@ -316,6 +400,39 @@ export default function Chat() {
             </div>
           </div>
         )}
+      </div>
+
+      <div className="hidden lg:flex w-64 border-l border-border bg-card/40 flex-col">
+        <div className="px-4 py-3 border-b border-border">
+          <p className="text-sm font-semibold text-foreground">Members</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Live status in this channel</p>
+        </div>
+        <div className="p-2 overflow-y-auto space-y-1">
+          {selectedParticipants.length === 0 ? (
+            <p className="text-xs text-muted-foreground p-2">Select a channel</p>
+          ) : (
+            selectedParticipants.map((participant) => {
+              const participantId = normalizeId(participant);
+              const status = getUserStatus(participantId, participant.status);
+              return (
+                <div key={participantId} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/70">
+                  <Avatar className="w-7 h-7">
+                    <AvatarFallback className="text-xs">
+                      {(participant.name || participant.email || 'U')[0]?.toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm truncate">{participant.name || participant.email || 'Member'}</p>
+                    <div className="flex items-center gap-1.5">
+                      <span className={cn('w-2 h-2 rounded-full', statusClass(status))} />
+                      <span className="text-[11px] text-muted-foreground capitalize">{status}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
 
       {showCreate && (

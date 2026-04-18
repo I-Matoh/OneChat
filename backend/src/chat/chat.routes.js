@@ -17,13 +17,25 @@ const { validateConversationCreate } = require('../middleware/validate');
 
 const router = Router();
 
+function getWorkspaceMemberIds(workspace) {
+  const memberIds = new Set([normalizeId(workspace.ownerId)]);
+  for (const member of workspace.members || []) {
+    memberIds.add(normalizeId(member.userId));
+  }
+  return memberIds;
+}
+
 /**
  * GET /chat/conversations
  * List all conversations for the authenticated user.
  */
 router.get('/conversations', authMiddleware, asyncHandler(async (req, res) => {
-  const filter = { participants: req.user.id };
-  if (req.query.workspaceId) filter.workspaceId = req.query.workspaceId;
+  let filter = { participants: req.user.id };
+  if (req.query.workspaceId) {
+    const workspace = await getWorkspaceForUser(req.query.workspaceId, req.user.id);
+    if (!workspace) throw new AppError('Workspace not found', 404, 'WORKSPACE_NOT_FOUND');
+    filter = { workspaceId: req.query.workspaceId };
+  }
 
   const convs = await Conversation.find(filter)
     .populate('participants', 'name email status')
@@ -43,8 +55,18 @@ router.post('/conversations', authMiddleware, validateConversationCreate, asyncH
 
   const workspace = await getWorkspaceForUser(workspaceId, req.user.id);
   if (!workspace) throw new AppError('Workspace not found', 404, 'WORKSPACE_NOT_FOUND');
+  const workspaceMemberIds = getWorkspaceMemberIds(workspace);
 
-  const participantSet = new Set([normalizeId(req.user.id), ...(participantIds || []).map(normalizeId)]);
+  const requestedParticipantIds = (participantIds || []).map(normalizeId);
+  const invalidParticipantIds = requestedParticipantIds.filter((id) => !workspaceMemberIds.has(id));
+  if (invalidParticipantIds.length) {
+    throw new AppError('All participants must belong to the workspace', 400, 'VALIDATION_ERROR');
+  }
+
+  const participantSet = new Set([
+    normalizeId(req.user.id),
+    ...(requestedParticipantIds.length ? requestedParticipantIds : [...workspaceMemberIds]),
+  ]);
   const participants = [...participantSet];
 
   const conv = await Conversation.create({
@@ -76,6 +98,28 @@ router.post('/conversations', authMiddleware, validateConversationCreate, asyncH
 }));
 
 /**
+ * POST /chat/conversations/:id/join
+ * Join a workspace conversation as the current user.
+ */
+router.post('/conversations/:id/join', authMiddleware, asyncHandler(async (req, res) => {
+  const conversation = await Conversation.findById(req.params.id);
+  if (!conversation) throw new AppError('Conversation not found', 404, 'CONVERSATION_NOT_FOUND');
+
+  const workspace = await getWorkspaceForUser(conversation.workspaceId, req.user.id);
+  if (!workspace) throw new AppError('Access denied', 403, 'ACCESS_DENIED');
+
+  const userId = normalizeId(req.user.id);
+  const hasParticipant = (conversation.participants || []).some((participantId) => normalizeId(participantId) === userId);
+  if (!hasParticipant) {
+    conversation.participants.push(req.user.id);
+    await conversation.save();
+  }
+
+  const populated = await conversation.populate('participants', 'name email status');
+  res.json(populated);
+}));
+
+/**
  * GET /chat/conversations/:id/messages
  * Get paginated messages for a conversation.
  */
@@ -85,7 +129,7 @@ router.get('/conversations/:id/messages', authMiddleware, asyncHandler(async (re
   const limit = parseInt(req.query.limit, 10) || 50;
   const skip = (page - 1) * limit;
   const conversation = await Conversation.findOne({ _id: id, participants: req.user.id });
-  if (!conversation) throw new AppError('Conversation not found', 404, 'CONVERSATION_NOT_FOUND');
+  if (!conversation) throw new AppError('Join the channel first', 403, 'CHAT_JOIN_REQUIRED');
 
   const messages = await Message.find({ conversationId: id })
     .sort({ createdAt: -1 })

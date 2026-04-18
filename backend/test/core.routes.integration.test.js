@@ -47,14 +47,20 @@ test('chat, docs, workspace, page, member, and task APIs cover the critical path
       _id: 'ws-1',
       name: 'Product',
       ownerId: 'user-1',
-      members: [{ userId: 'user-1', role: 'owner' }],
+      members: [
+        { userId: 'user-1', role: 'owner' },
+        { userId: 'user-2', role: 'editor' },
+      ],
       async save() {
         return this;
       },
     },
     pages: [],
     tasks: [],
-    users: [{ _id: 'user-1', name: 'Ada', email: 'ada@example.com', status: 'online' }],
+    users: [
+      { _id: 'user-1', name: 'Ada', email: 'ada@example.com', status: 'online' },
+      { _id: 'user-2', name: 'Grace', email: 'grace@example.com', status: 'offline' },
+    ],
   };
 
   Conversation.find = () => createQueryResult(state.conversations);
