@@ -10,7 +10,7 @@ export default function MainLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState(null);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   useSocket(token);
 
   useEffect(() => {
