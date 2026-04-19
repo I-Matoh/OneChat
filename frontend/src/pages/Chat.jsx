@@ -11,6 +11,7 @@ import api from '@/lib/api';
 import CreateConversationModal from '@/components/chat/CreateCoversationModal';
 import { useAuth } from '@/hooks/useAuth';
 import { useSocket } from '@/hooks/useSocket';
+import { useToast } from '@/components/ui/use-toast';
 
 function getId(item) {
   return item?._id || item?.id;
@@ -39,6 +40,7 @@ export default function Chat() {
   const { token } = useAuth();
   const queryClient = useQueryClient();
   const { socket, connected } = useSocket(token);
+  const { toast } = useToast();
   const bottomRef = useRef(null);
 
   const [selectedConvId, setSelectedConvId] = useState(null);
@@ -203,6 +205,41 @@ export default function Chat() {
       socket.off('message:status', onMessageStatus);
     };
   }, [socket, queryClient, selectedConvId, currentWorkspaceId]);
+
+  const handleStartDM = async (targetUserId) => {
+    if (!targetUserId || targetUserId === user?.id) return;
+
+    const existingDm = conversations.find((c) => {
+      const pIds = (c.participants || []).map((p) => normalizeId(p));
+      return pIds.length === 2 &&
+             pIds.includes(normalizeId(user.id)) &&
+             pIds.includes(normalizeId(targetUserId));
+    });
+
+    if (existingDm) {
+      setSelectedConvId(getId(existingDm));
+      return;
+    }
+
+    try {
+      const newConv = await api.conversations.create({
+        workspaceId: currentWorkspaceId,
+        participantIds: [targetUserId],
+        name: ''
+      });
+      queryClient.setQueryData(['conversations', currentWorkspaceId], (existing = []) => {
+        return [newConv, ...existing];
+      });
+      setSelectedConvId(getId(newConv));
+    } catch (error) {
+      console.error('Failed to start direct message', error);
+      toast({
+        title: "Failed to start direct message",
+        description: error.message || "An unexpected error occurred while creating the conversation.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const joinSelectedChannel = async () => {
     if (!selectedConvId || joiningChannel) return;
@@ -404,30 +441,43 @@ export default function Chat() {
 
       <div className="hidden lg:flex w-64 border-l border-border bg-card/40 flex-col">
         <div className="px-4 py-3 border-b border-border">
-          <p className="text-sm font-semibold text-foreground">Members</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Live status in this channel</p>
+          <p className="text-sm font-semibold text-foreground">Workspace</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Online users and members</p>
         </div>
         <div className="p-2 overflow-y-auto space-y-1">
-          {selectedParticipants.length === 0 ? (
-            <p className="text-xs text-muted-foreground p-2">Select a channel</p>
+          {workspaceMembers.length === 0 ? (
+            <p className="text-xs text-muted-foreground p-2">No members found</p>
           ) : (
-            selectedParticipants.map((participant) => {
+            workspaceMembers.map((member) => {
+              if (!member?.user) return null;
+              const participant = member.user;
               const participantId = normalizeId(participant);
               const status = getUserStatus(participantId, participant.status);
+              const isCurrentUser = participantId === normalizeId(user?.id);
+              
               return (
-                <div key={participantId} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/70">
+                <div key={participantId} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/70 group">
                   <Avatar className="w-7 h-7">
                     <AvatarFallback className="text-xs">
                       {(participant.name || participant.email || 'U')[0]?.toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm truncate">{participant.name || participant.email || 'Member'}</p>
+                    <p className="text-sm truncate">{participant.name || participant.email || 'Member'}{isCurrentUser && ' (You)'}</p>
                     <div className="flex items-center gap-1.5">
                       <span className={cn('w-2 h-2 rounded-full', statusClass(status))} />
                       <span className="text-[11px] text-muted-foreground capitalize">{status}</span>
                     </div>
                   </div>
+                  {!isCurrentUser && (
+                    <button
+                      onClick={() => handleStartDM(participantId)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-muted rounded-md text-muted-foreground hover:text-foreground shrink-0"
+                      title="Direct Message"
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               );
             })

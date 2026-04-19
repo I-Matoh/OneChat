@@ -13,10 +13,24 @@ build/
 
 .claude
 .kilo
-.agent
+.agent 
 .cursor
 .gemini
 .aider
+
+
+
+# Agent and AI related
+.agent/
+.agent-cache/
+.agentignore
+*.agentignore
+.agentignore.*
+.agentignore.*.*
+.claude/
+.cursor/
+.gemini/
+.aider/
 
 
 # Logs
