@@ -36,65 +36,13 @@ const AnimatedSignIn: React.FC<AnimatedSignInProps> = ({ initialMode = "login" }
   const [resetSent, setResetSent] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [formTransition, setFormTransition] = useState(false);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setMounted(true), 50);
     return () => clearTimeout(t);
   }, []);
 
-  // Ultra-slow luxurious monochromatic mesh background
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    let animId = 0;
-    const orbs = [
-      { x: 0.2, y: 0.3, r: 500, color: "rgba(255, 255, 255, 0.03)", vx: 0.0001, vy: 0.00015 },
-      { x: 0.8, y: 0.7, r: 600, color: "rgba(255, 255, 255, 0.02)", vx: -0.00015, vy: 0.0001 },
-      { x: 0.5, y: 0.5, r: 400, color: "rgba(255, 255, 255, 0.02)", vx: 0.0001, vy: -0.0001 },
-    ];
-
-    const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-    resize();
-    window.addEventListener("resize", resize);
-
-    const draw = () => {
-      ctx.fillStyle = "#020202";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      for (const orb of orbs) {
-        orb.x += orb.vx;
-        orb.y += orb.vy;
-        if (orb.x < -0.2 || orb.x > 1.2) orb.vx *= -1;
-        if (orb.y < -0.2 || orb.y > 1.2) orb.vy *= -1;
-
-        const x = orb.x * canvas.width;
-        const y = orb.y * canvas.height;
-        const gradient = ctx.createRadialGradient(x, y, 0, x, y, orb.r);
-        
-        gradient.addColorStop(0, orb.color);
-        gradient.addColorStop(1, "transparent");
-        
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(x, y, orb.r, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      animId = requestAnimationFrame(draw);
-    };
-    draw();
-
-    return () => {
-      cancelAnimationFrame(animId);
-      window.removeEventListener("resize", resize);
-    };
-  }, []);
+  // Background is now handled externally via LoginBackground component
 
   const validate = () => {
     const errors: {name?: string; email?: string; password?: string} = {};
@@ -233,10 +181,7 @@ const AnimatedSignIn: React.FC<AnimatedSignInProps> = ({ initialMode = "login" }
         `}
       </style>
 
-      {/* Canvas Background */}
-      <canvas ref={canvasRef} style={styles.canvas} />
-      
-      {/* Grain texture overlay to add physical depth */}
+      {/* 3D Background handled externally, we just overlay grain */}
       <div style={styles.grain} />
 
       {/* Exquisite Back Button */}
@@ -379,17 +324,10 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#030303",
+    backgroundColor: "transparent",
     fontFamily: "'Outfit', sans-serif",
     overflow: "hidden",
-  },
-  canvas: {
-    position: "absolute",
-    inset: 0,
-    width: "100%",
-    height: "100%",
-    zIndex: 0,
-    opacity: 0.8,
+    zIndex: 10,
   },
   grain: {
     // Generates a digital noise feeling overlay

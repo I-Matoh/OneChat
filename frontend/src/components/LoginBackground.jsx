@@ -5,9 +5,9 @@ import * as THREE from 'three';
 
 /**
  * Floating particle that represents a chat message bubble
- * Creates visual interest without overwhelming the login form
+ * Features a luxury frosted glassmorphism aesthetic
  */
-function ChatBubble({ position, scale, speed, color }) {
+function ChatBubble({ position, scale, speed }) {
   const meshRef = useRef();
   const initialY = position[1];
   
@@ -24,15 +24,17 @@ function ChatBubble({ position, scale, speed, color }) {
   return (
     <Float speed={1.5} rotationIntensity={0.5} floatIntensity={0.5}>
       <mesh ref={meshRef} position={position} scale={scale}>
-        <sphereGeometry args={[1, 32, 32]} />
-        <meshStandardMaterial 
-          color={color} 
-          transparent 
-          opacity={0.5} 
+        <sphereGeometry args={[1, 64, 64]} />
+        <meshPhysicalMaterial 
+          color="#ffffff" 
+          transmission={0.95}
+          opacity={1} 
+          metalness={0.1}
           roughness={0.1}
-          metalness={0.3}
-          emissive={color}
-          emissiveIntensity={0.15}
+          ior={1.5}
+          thickness={0.5}
+          clearcoat={1}
+          clearcoatRoughness={0.1}
         />
       </mesh>
     </Float>
@@ -54,14 +56,14 @@ function ConnectionRing({ position, scale, speed }) {
 
   return (
     <mesh ref={meshRef} position={position} scale={scale}>
-      <torusGeometry args={[1, 0.3, 16, 100]} />
+      <torusGeometry args={[1, 0.015, 32, 100]} />
       <meshStandardMaterial 
-        color="#f43f5e" 
+        color="#ffffff" 
         transparent 
-        opacity={0.35} 
+        opacity={0.15} 
         roughness={0.1}
-        metalness={0.5}
-        emissive="#f43f5e"
+        metalness={0.8}
+        emissive="#ffffff"
         emissiveIntensity={0.1}
       />
     </mesh>
@@ -72,74 +74,71 @@ function ConnectionRing({ position, scale, speed }) {
  * Main 3D scene content - renders all 3D elements
  */
 function SceneContent() {
-  // Generate random positions for chat bubbles -  colors
+  // Generate random positions for chat bubbles
   const bubbles = useMemo(() => {
-    const colors = ['#f43f5e', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#fbbf24', '#ec4899'];
-    return Array.from({ length: 15 }, (_, i) => ({
+    return Array.from({ length: 12 }, (_, i) => ({
       position: [
-        (Math.random() - 0.5) * 12,
-        (Math.random() - 0.5) * 8,
-        (Math.random() - 0.5) * 6 - 2
+        (Math.random() - 0.5) * 15,
+        (Math.random() - 0.5) * 10,
+        (Math.random() - 0.5) * 8 - 2
       ],
-      scale: 0.2 + Math.random() * 0.4,
-      speed: 0.5 + Math.random() * 1.5,
-      color: colors[i % colors.length]
+      scale: 0.3 + Math.random() * 0.7,
+      speed: 0.2 + Math.random() * 0.8,
     }));
   }, []);
 
   // Generate connection rings
   const rings = useMemo(() => {
-    return Array.from({ length: 3 }, (_, i) => ({
+    return Array.from({ length: 4 }, (_, i) => ({
       position: [
+        (Math.random() - 0.5) * 10,
         (Math.random() - 0.5) * 8,
-        (Math.random() - 0.5) * 6,
-        -3 - i * 2
+        -4 - i * 2
       ],
-      scale: 0.5 + Math.random() * 0.8,
-      speed: 0.3 + Math.random() * 0.3
+      scale: 1 + Math.random() * 1.5,
+      speed: 0.1 + Math.random() * 0.3
     }));
   }, []);
 
   return (
     <>
       {/* Ambient lighting */}
-      <ambientLight intensity={0.35} />
+      <ambientLight intensity={0.15} />
       
-      {/* Main directional light */}
+      {/* Subtle, elegant directional lighting */}
       <directionalLight 
-        position={[5, 5, 5]} 
-        intensity={0.7} 
+        position={[5, 10, 5]} 
+        intensity={0.6} 
         color="#ffffff"
       />
       
-      {/* Accent point lights - luxury rose gold and gold */}
-      <pointLight position={[-5, 3, 2]} intensity={0.6} color="#f43f5e" />
-      <pointLight position={[5, -3, 2]} intensity={0.4} color="#f59e0b" />
-      <pointLight position={[0, -4, 3]} intensity={0.3} color="#10b981" />
+      {/* Accent point lights - Slate/Ice Blue for luxury tech feel */}
+      <pointLight position={[-5, 3, 2]} intensity={0.5} color="#818cf8" />
+      <pointLight position={[5, -3, 2]} intensity={0.3} color="#e0e7ff" />
+      <pointLight position={[0, -5, -2]} intensity={0.2} color="#312e81" />
       
       {/* Starfield background */}
       <Stars 
-        radius={50} 
+        radius={100} 
         depth={50} 
-        count={2000} 
-        factor={4} 
+        count={3000} 
+        factor={3} 
         saturation={0} 
         fade 
-        speed={0.5}
+        speed={0.2}
       />
       
-      {/* Floating chat bubbles */}
+      {/* Floating glass chat bubbles */}
       {bubbles.map((bubble, i) => (
         <ChatBubble 
           key={`bubble-${i}`}
           position={bubble.position}
           scale={bubble.scale}
           speed={bubble.speed}
-          color={bubble.color}
         />
       ))}
       
-      {/* Connection rings */}
+      {/* Delicate connection rings */}
       {rings.map((ring, i) => (
         <ConnectionRing 
           key={`ring-${i}`}
@@ -154,27 +153,29 @@ function SceneContent() {
 
 /**
  * Login Background 3D Component
- * Provides an immersive 3D experience behind the login form
- * 
- * Features:
- * - Floating chat bubble particles representing communication
- * - Connection rings representing collaboration
- * - Starfield background for depth
- * - Smooth animations with low performance impact
- * - Responsive to different screen sizes
+ * Elegant, luxury monochromatic 3D experience
  */
 export default function LoginBackground() {
   return (
-    <div className="login-3d-background">
+    <div 
+      className="login-3d-background" 
+      style={{ 
+        position: 'fixed', 
+        inset: 0, 
+        background: '#020202', // Deep cinematic black
+        zIndex: 0 
+      }}
+    >
       <Canvas
         camera={{ position: [0, 0, 8], fov: 60 }}
         dpr={[1, 2]} // Responsive pixel ratio for performance
         gl={{ 
           antialias: true,
-          alpha: true,
+          alpha: false,
           powerPreference: 'high-performance'
         }}
       >
+        <color attach="background" args={['#020202']} />
         <SceneContent />
       </Canvas>
     </div>
