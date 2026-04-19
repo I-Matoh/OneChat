@@ -1,34 +1,60 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  MessageSquare, FileText, CheckSquare, Search, Zap, Shield,
-  Users, ArrowRight, ChevronDown, Star, Check, Menu, X, Globe,
-  Sparkles, BarChart3, Lock, Layers, Play,
+  MessageSquare,
+  FileText,
+  CheckSquare,
+  Search,
+  Zap,
+  ArrowRight,
+  ChevronDown,
+  Star,
+  Check,
+  Menu,
+  X,
+  Sparkles,
+  Lock,
+  Layers,
+  Play,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 function useScrollReveal() {
   const ref = useRef(null);
   const [visible, setVisible] = useState(false);
+
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+
     const obs = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) { setVisible(true); obs.disconnect(); } },
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisible(true);
+          obs.disconnect();
+        }
+      },
       { threshold: 0.12 }
     );
+
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
+
   return [ref, visible];
 }
 
 function Reveal({ children, className, delay = 0 }) {
   const [ref, visible] = useScrollReveal();
+
   return (
     <div
       ref={ref}
-      className={cn('transition-all duration-700', visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6', className)}
+      className={cn(
+        'transition-all duration-700 motion-reduce:transform-none motion-reduce:transition-none',
+        visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6 motion-reduce:opacity-100',
+        className
+      )}
       style={{ transitionDelay: `${delay}ms` }}
     >
       {children}
@@ -89,7 +115,7 @@ const STEPS = [
 
 const TESTIMONIALS = [
   {
-    quote: "We replaced Slack, Notion, and Asana with OneChat. Our context-switching dropped by 80%.",
+    quote: 'We replaced Slack, Notion, and Asana with OneChat. Our context-switching dropped by 80%.',
     author: 'Sarah Chen',
     role: 'Head of Product, Arkwright Labs',
     avatar: 'SC',
@@ -103,7 +129,7 @@ const TESTIMONIALS = [
     color: 'bg-blue-500',
   },
   {
-    quote: "Finally, a tool that actually reduces tool sprawl. Onboarding was shockingly fast.",
+    quote: 'Finally, a tool that actually reduces tool sprawl. Onboarding was shockingly fast.',
     author: 'Priya Nair',
     role: 'Operations Lead, Driftwork',
     avatar: 'PN',
@@ -117,13 +143,7 @@ const PLANS = [
     price: { monthly: 10, yearly: 8 },
     desc: 'Perfect for small teams getting started.',
     highlight: false,
-    features: [
-      'Up to 10 members',
-      'Unlimited messages',
-      '10 GB storage',
-      'Basic AI assistant',
-      'Community support',
-    ],
+    features: ['Up to 10 members', 'Unlimited messages', '10 GB storage', 'Basic AI assistant', 'Community support'],
   },
   {
     name: 'Business',
@@ -161,14 +181,20 @@ const PLANS = [
 const FAQS = [
   { q: 'Can I switch plans anytime?', a: 'Yes. Upgrade or downgrade at any time. Billing is prorated automatically.' },
   { q: 'Is there a free trial?', a: 'Every plan starts with a 14-day free trial — no credit card needed.' },
-  { q: 'How is data secured?', a: 'All data is encrypted in transit and at rest. We are SOC 2 Type II certified with optional E2E encryption.' },
-  { q: 'Does it integrate with our existing tools?', a: 'Yes — GitHub, Jira, Google Drive, Figma, and 50+ more via our native integrations and Zapier.' },
+  {
+    q: 'How is data secured?',
+    a: 'All data is encrypted in transit and at rest. We are SOC 2 Type II certified with optional E2E encryption.',
+  },
+  {
+    q: 'Does it integrate with our existing tools?',
+    a: 'Yes — GitHub, Jira, Google Drive, Figma, and 50+ more via our native integrations and Zapier.',
+  },
   { q: 'What are the team size limits?', a: 'Starter supports up to 10 members. Business and Enterprise are unlimited.' },
 ];
 
 const LOGOS = ['Vercel', 'Stripe', 'Linear', 'Loom', 'Framer', 'Raycast'];
 
-function Navbar({ onCTA }) {
+function Navbar() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -186,49 +212,71 @@ function Navbar({ onCTA }) {
   ];
 
   return (
-    <header className={cn(
-      'fixed top-0 inset-x-0 z-50 transition-all duration-300',
-      scrolled ? 'bg-background/90 backdrop-blur-lg border-b border-border shadow-sm' : 'bg-transparent'
-    )}>
-      <nav className="max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16">
-        <a href="#" className="flex items-center gap-2 select-none">
-          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-            <Layers className="w-4 h-4 text-white" />
-          </div>
+    <header
+      className={cn(
+        'fixed top-4 inset-x-4 z-50 transition-all duration-300',
+        scrolled
+          ? 'mx-auto max-w-6xl rounded-2xl border border-border/80 bg-background/90 shadow-lg shadow-black/5 backdrop-blur-xl'
+          : 'mx-auto max-w-6xl rounded-2xl border border-transparent bg-transparent'
+      )}
+    >
+      <nav className="px-4 sm:px-6 flex items-center justify-between h-16">
+<a href="#" className="flex items-center gap-2 select-none">
+          <img src="/logo.png" alt="OneChat" className="w-9 h-9 rounded-xl object-contain" />
           <span className="font-cal font-bold text-foreground text-lg tracking-tight">OneChat</span>
         </a>
 
         <div className="hidden md:flex items-center gap-6">
-          {links.map(l => (
-            <a key={l.href} href={l.href} className="text-sm text-muted-foreground hover:text-foreground transition-colors select-none">
+          {links.map((l) => (
+            <a
+              key={l.href}
+              href={l.href}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors select-none cursor-pointer"
+            >
               {l.label}
             </a>
           ))}
         </div>
 
         <div className="hidden md:flex items-center gap-3">
-          <Link to="/login" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors select-none">
+          <Link
+            to="/login"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors select-none cursor-pointer"
+          >
             Sign in
           </Link>
-          <Link to="/signup" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors select-none shadow-sm">
+          <Link
+            to="/signup"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors select-none shadow-sm cursor-pointer"
+          >
             Start Free <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
 
-        <button onClick={() => setOpen(!open)} className="md:hidden p-2 text-foreground select-none">
+        <button
+          onClick={() => setOpen(!open)}
+          className="md:hidden p-2 text-foreground select-none cursor-pointer min-h-11 min-w-11 flex items-center justify-center rounded-lg hover:bg-muted/70 transition-colors"
+        >
           {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
       </nav>
 
       {open && (
-        <div className="md:hidden bg-background border-b border-border px-4 pb-4 space-y-2">
-          {links.map(l => (
-            <a key={l.href} href={l.href} onClick={() => setOpen(false)}
-              className="block py-2 text-sm text-muted-foreground hover:text-foreground select-none">
+        <div className="md:hidden bg-background/95 border-t border-border/70 px-4 pb-4 space-y-2 backdrop-blur-xl rounded-b-2xl">
+          {links.map((l) => (
+            <a
+              key={l.href}
+              href={l.href}
+              onClick={() => setOpen(false)}
+              className="block py-2 text-sm text-muted-foreground hover:text-foreground select-none cursor-pointer"
+            >
               {l.label}
             </a>
           ))}
-          <Link to="/signup" className="mt-2 flex items-center justify-center gap-1.5 w-full px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold select-none">
+          <Link
+            to="/signup"
+            className="mt-2 flex items-center justify-center gap-1.5 w-full px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold select-none cursor-pointer min-h-11"
+          >
             Start Free <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
@@ -239,10 +287,10 @@ function Navbar({ onCTA }) {
 
 function HeroMockup() {
   return (
-    <div className="relative w-full max-w-2xl mx-auto mt-12 select-none">
-      <div className="absolute inset-0 -z-10 rounded-2xl bg-gradient-to-br from-primary/30 via-violet-400/20 to-blue-400/20 blur-3xl scale-105" />
+    <div className="relative w-full max-w-2xl mx-auto mt-12 lg:mt-0 select-none">
+      <div className="absolute inset-0 -z-10 rounded-[2rem] bg-gradient-to-br from-primary/30 via-violet-400/20 to-blue-400/20 blur-3xl scale-105" />
 
-      <div className="rounded-2xl border border-border bg-card shadow-2xl overflow-hidden">
+      <div className="rounded-[1.75rem] border border-border/70 bg-card/90 shadow-2xl shadow-black/10 overflow-hidden backdrop-blur">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/30">
           <div className="w-3 h-3 rounded-full bg-red-400" />
           <div className="w-3 h-3 rounded-full bg-yellow-400" />
@@ -253,14 +301,22 @@ function HeroMockup() {
         <div className="flex h-64 sm:h-80">
           <div className="w-40 border-r border-border bg-muted/20 p-3 space-y-1.5 hidden sm:block">
             {['# general', '# design', '# engineering', '# announcements'].map((c, i) => (
-              <div key={c} className={cn('text-xs px-2 py-1.5 rounded', i === 0 ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground')}>
+              <div
+                key={c}
+                className={cn(
+                  'text-xs px-2 py-1.5 rounded',
+                  i === 0 ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground'
+                )}
+              >
                 {c}
               </div>
             ))}
             <div className="mt-3 pt-2 border-t border-border">
               <div className="text-xs text-muted-foreground px-2 mb-1">PAGES</div>
-              {['📋 Roadmap', '📝 Meeting notes'].map(p => (
-                <div key={p} className="text-xs px-2 py-1.5 rounded text-muted-foreground">{p}</div>
+              {['📋 Roadmap', '📝 Meeting notes'].map((p) => (
+                <div key={p} className="text-xs px-2 py-1.5 rounded text-muted-foreground">
+                  {p}
+                </div>
               ))}
             </div>
           </div>
@@ -273,10 +329,20 @@ function HeroMockup() {
                 { name: 'You', msg: 'Agreed. Merging to main now.', color: 'bg-primary', mine: true },
               ].map((m, i) => (
                 <div key={i} className={cn('flex gap-2', m.mine && 'flex-row-reverse')}>
-                  <div className={cn('w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0', m.color)}>
+                  <div
+                    className={cn(
+                      'w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0',
+                      m.color
+                    )}
+                  >
                     {m.name[0]}
                   </div>
-                  <div className={cn('max-w-[70%] text-xs px-3 py-2 rounded-xl', m.mine ? 'bg-primary text-primary-foreground rounded-tr-sm' : 'bg-muted text-foreground rounded-tl-sm')}>
+                  <div
+                    className={cn(
+                      'max-w-[70%] text-xs px-3 py-2 rounded-xl leading-relaxed',
+                      m.mine ? 'bg-primary text-primary-foreground rounded-tr-sm' : 'bg-muted text-foreground rounded-tl-sm'
+                    )}
+                  >
                     {m.msg}
                   </div>
                 </div>
@@ -294,7 +360,7 @@ function HeroMockup() {
         </div>
       </div>
 
-      <div className="absolute -top-4 -right-4 bg-green-500 text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 animate-bounce">
+      <div className="absolute -top-4 -right-4 bg-green-500 text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 motion-safe:animate-pulse">
         <div className="w-2 h-2 rounded-full bg-white" />
         Live Sync
       </div>
@@ -308,35 +374,47 @@ function HeroMockup() {
 
 function PricingCard({ plan, isYearly }) {
   const price = isYearly ? plan.price.yearly : plan.price.monthly;
+
   return (
-    <div className={cn(
-      'relative flex flex-col rounded-2xl border p-6 transition-all duration-300 hover:shadow-xl',
-      plan.highlight
-        ? 'border-primary bg-primary text-primary-foreground shadow-lg shadow-primary/20 scale-105'
-        : 'border-border bg-card hover:border-primary/40'
-    )}>
+    <div
+      className={cn(
+        'relative flex flex-col rounded-3xl border p-6 transition-all duration-300 hover:shadow-xl',
+        plan.highlight
+          ? 'border-primary bg-primary text-primary-foreground shadow-lg shadow-primary/20 md:scale-[1.03]'
+          : 'border-border bg-card/90 hover:border-primary/40'
+      )}
+    >
       {plan.badge && (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-primary-foreground text-primary text-xs font-bold rounded-full shadow">
           {plan.badge}
         </div>
       )}
       <div className="mb-4">
-        <p className={cn('text-sm font-semibold uppercase tracking-wider mb-1', plan.highlight ? 'text-primary-foreground/70' : 'text-muted-foreground')}>
+        <p
+          className={cn(
+            'text-sm font-semibold uppercase tracking-wider mb-1',
+            plan.highlight ? 'text-primary-foreground/70' : 'text-muted-foreground'
+          )}
+        >
           {plan.name}
         </p>
         <div className="flex items-end gap-1">
           <span className="text-4xl font-cal font-bold">${price}</span>
-          <span className={cn('text-sm mb-1', plan.highlight ? 'text-primary-foreground/70' : 'text-muted-foreground')}>/mo</span>
+          <span className={cn('text-sm mb-1', plan.highlight ? 'text-primary-foreground/70' : 'text-muted-foreground')}>
+            /mo
+          </span>
         </div>
         {isYearly && (
           <p className={cn('text-xs mt-1', plan.highlight ? 'text-primary-foreground/70' : 'text-green-600 dark:text-green-400')}>
             Save ${(plan.price.monthly - plan.price.yearly) * 12}/yr
           </p>
         )}
-        <p className={cn('text-sm mt-2', plan.highlight ? 'text-primary-foreground/80' : 'text-muted-foreground')}>{plan.desc}</p>
+        <p className={cn('text-sm mt-2', plan.highlight ? 'text-primary-foreground/80' : 'text-muted-foreground')}>
+          {plan.desc}
+        </p>
       </div>
       <ul className="space-y-2.5 flex-1 mb-6">
-        {plan.features.map(f => (
+        {plan.features.map((f) => (
           <li key={f} className="flex items-start gap-2 text-sm">
             <Check className={cn('w-4 h-4 mt-0.5 shrink-0', plan.highlight ? 'text-primary-foreground' : 'text-primary')} />
             <span className={plan.highlight ? 'text-primary-foreground/90' : 'text-foreground'}>{f}</span>
@@ -346,7 +424,7 @@ function PricingCard({ plan, isYearly }) {
       <Link
         to="/signup"
         className={cn(
-          'w-full text-center py-2.5 rounded-xl font-semibold text-sm transition-all select-none',
+          'w-full text-center py-2.5 rounded-xl font-semibold text-sm transition-all select-none cursor-pointer min-h-11',
           plan.highlight
             ? 'bg-primary-foreground text-primary hover:bg-primary-foreground/90'
             : 'bg-primary text-primary-foreground hover:bg-primary/90'
@@ -360,18 +438,18 @@ function PricingCard({ plan, isYearly }) {
 
 function FAQItem({ q, a }) {
   const [open, setOpen] = useState(false);
+
   return (
-    <div className="border-b border-border last:border-0">
+    <div className="rounded-2xl border border-border/80 bg-card/70 px-4 sm:px-5">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center justify-between w-full py-4 text-left select-none group"
+        className="flex items-center justify-between w-full py-4 text-left select-none group cursor-pointer min-h-11"
+        aria-expanded={open}
       >
         <span className="font-medium text-foreground text-sm sm:text-base">{q}</span>
         <ChevronDown className={cn('w-4 h-4 text-muted-foreground transition-transform shrink-0 ml-4', open && 'rotate-180')} />
       </button>
-      {open && (
-        <p className="pb-4 text-sm text-muted-foreground leading-relaxed">{a}</p>
-      )}
+      {open && <p className="pb-4 text-sm text-muted-foreground leading-relaxed">{a}</p>}
     </div>
   );
 }
@@ -380,58 +458,74 @@ export default function Landing() {
   const [isYearly, setIsYearly] = useState(false);
 
   return (
-    <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
+    <div className="relative min-h-screen bg-background text-foreground overflow-x-hidden">
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_10%_10%,hsl(var(--accent)/0.5),transparent_35%),radial-gradient(circle_at_90%_20%,hsl(var(--primary)/0.14),transparent_40%),radial-gradient(circle_at_50%_100%,hsl(var(--primary)/0.08),transparent_40%)]" />
+        <div className="absolute inset-0 opacity-[0.35] [background-image:linear-gradient(hsl(var(--border)/0.45)_1px,transparent_1px),linear-gradient(90deg,hsl(var(--border)/0.45)_1px,transparent_1px)] [background-size:56px_56px]" />
+      </div>
+
       <Navbar />
 
-      <section className="relative pt-32 pb-20 sm:pt-40 sm:pb-28 px-4 sm:px-6 text-center overflow-hidden">
-        <div className="absolute inset-0 -z-10 bg-gradient-to-b from-accent/40 via-background to-background" />
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full bg-primary/5 blur-3xl -z-10" />
+      <section className="relative pt-32 pb-20 sm:pt-40 sm:pb-24 px-4 sm:px-6 overflow-hidden">
+        <div className="absolute inset-0 -z-10 bg-gradient-to-b from-accent/30 via-background/50 to-background" />
 
-        <Reveal>
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-primary/30 bg-primary/5 text-primary text-xs font-semibold mb-6">
-            <Zap className="w-3.5 h-3.5" /> New: AI-powered meeting summaries →
+        <div className="max-w-6xl mx-auto grid lg:grid-cols-[1.05fr_0.95fr] items-center gap-10 lg:gap-14">
+          <div className="text-center lg:text-left">
+            <Reveal>
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-primary/30 bg-primary/5 text-primary text-xs font-semibold mb-6">
+                <Zap className="w-3.5 h-3.5" /> New: AI-powered meeting summaries &rarr;
+              </div>
+            </Reveal>
+
+            <Reveal delay={80}>
+              <h1 className="font-cal text-4xl sm:text-6xl lg:text-7xl font-bold text-foreground leading-[1.04] tracking-tight max-w-4xl">
+                One workspace.
+                <br />
+                <span className="text-primary">Every tool your team needs.</span>
+              </h1>
+            </Reveal>
+
+            <Reveal delay={160}>
+              <p className="mt-6 text-lg sm:text-xl text-muted-foreground max-w-2xl leading-relaxed lg:max-w-xl">
+                Replace Slack, Notion, and Asana with a single real-time platform. Chat, docs, tasks, and AI &mdash; all in one
+                tab, always in sync.
+              </p>
+            </Reveal>
+
+            <Reveal delay={240}>
+              <div className="mt-10 flex flex-col sm:flex-row items-center lg:items-start gap-3">
+                <Link
+                  to="/signup"
+                  className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all shadow-lg shadow-primary/25 select-none text-sm sm:text-base cursor-pointer min-h-11"
+                >
+                  Start Free Trial <ArrowRight className="w-4 h-4" />
+                </Link>
+                <a
+                  href="#features"
+                  className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl border border-border bg-card/90 text-foreground font-semibold hover:bg-muted transition-all select-none text-sm sm:text-base cursor-pointer min-h-11"
+                >
+                  <Play className="w-4 h-4" /> Book a Demo
+                </a>
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground">No credit card required &middot; 14-day free trial &middot; Cancel anytime</p>
+            </Reveal>
           </div>
-        </Reveal>
 
-        <Reveal delay={80}>
-          <h1 className="font-cal text-4xl sm:text-6xl lg:text-7xl font-bold text-foreground leading-[1.08] tracking-tight max-w-4xl mx-auto">
-            One workspace.<br />
-            <span className="text-primary">Every tool your team needs.</span>
-          </h1>
-        </Reveal>
-
-        <Reveal delay={160}>
-          <p className="mt-6 text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            Replace Slack, Notion, and Asana with a single real-time platform.
-            Chat, docs, tasks, and AI — all in one tab, always in sync.
-          </p>
-        </Reveal>
-
-        <Reveal delay={240}>
-          <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
-            <Link to="/signup" className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all shadow-lg shadow-primary/25 select-none text-sm sm:text-base">
-              Start Free Trial <ArrowRight className="w-4 h-4" />
-            </Link>
-            <a href="#features" className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl border border-border bg-card text-foreground font-semibold hover:bg-muted transition-all select-none text-sm sm:text-base">
-              <Play className="w-4 h-4" /> Book a Demo
-            </a>
-          </div>
-          <p className="mt-3 text-xs text-muted-foreground">No credit card required · 14-day free trial · Cancel anytime</p>
-        </Reveal>
-
-        <Reveal delay={320}>
-          <HeroMockup />
-        </Reveal>
+          <Reveal delay={320}>
+            <HeroMockup />
+          </Reveal>
+        </div>
       </section>
 
-      <section className="py-12 border-y border-border bg-muted/20">
+      <section className="py-12 border-y border-border/70 bg-muted/20">
         <div className="max-w-5xl mx-auto px-4 sm:px-6">
-          <p className="text-center text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-8">
-            Trusted by teams at
-          </p>
-          <div className="flex flex-wrap justify-center items-center gap-8 sm:gap-12">
-            {LOGOS.map(l => (
-              <div key={l} className="text-base font-cal font-bold text-muted-foreground/50 hover:text-muted-foreground transition-colors select-none">
+          <p className="text-center text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-8">Trusted by teams at</p>
+          <div className="flex flex-wrap justify-center items-center gap-4 sm:gap-5">
+            {LOGOS.map((l) => (
+              <div
+                key={l}
+                className="rounded-xl border border-border/70 bg-card/70 px-4 py-2.5 text-sm sm:text-base font-cal font-bold text-muted-foreground/65 hover:text-muted-foreground hover:border-primary/30 transition-colors select-none"
+              >
                 {l}
               </div>
             ))}
@@ -445,15 +539,18 @@ export default function Landing() {
             <div className="text-center mb-16">
               <p className="text-primary text-sm font-semibold uppercase tracking-widest mb-3">Features</p>
               <h2 className="font-cal text-3xl sm:text-5xl font-bold text-foreground">Everything in one place.</h2>
-              <p className="mt-4 text-lg text-muted-foreground max-w-xl mx-auto">No more tab juggling. Every feature your team reaches for, now living under one roof.</p>
+              <p className="mt-4 text-lg text-muted-foreground max-w-xl mx-auto">
+                No more tab juggling. Every feature your team reaches for, now living under one roof.
+              </p>
             </div>
           </Reveal>
+
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {FEATURES.map((f, i) => {
               const Icon = f.icon;
               return (
                 <Reveal key={f.title} delay={i * 60}>
-                  <div className="group p-6 rounded-2xl border border-border bg-card hover:border-primary/40 hover:shadow-lg transition-all duration-300">
+                  <div className="group p-6 rounded-2xl border border-border/80 bg-card/85 hover:border-primary/40 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300">
                     <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center mb-4', f.bg)}>
                       <Icon className={cn('w-5 h-5', f.color)} />
                     </div>
@@ -467,7 +564,7 @@ export default function Landing() {
         </div>
       </section>
 
-      <section id="how" className="py-24 px-4 sm:px-6 bg-muted/30">
+      <section id="how" className="py-24 px-4 sm:px-6 bg-muted/30 border-y border-border/60">
         <div className="max-w-4xl mx-auto">
           <Reveal>
             <div className="text-center mb-16">
@@ -475,11 +572,12 @@ export default function Landing() {
               <h2 className="font-cal text-3xl sm:text-5xl font-bold text-foreground">Up and running in minutes.</h2>
             </div>
           </Reveal>
+
           <div className="grid sm:grid-cols-3 gap-8">
             {STEPS.map((s, i) => (
               <Reveal key={s.num} delay={i * 80}>
-                <div className="text-center">
-                  <div className="text-5xl font-cal font-bold text-primary/20 mb-4">{s.num}</div>
+                <div className="text-center rounded-2xl border border-border/70 bg-card/60 p-6">
+                  <div className="text-5xl font-cal font-bold text-primary/25 mb-4">{s.num}</div>
                   <h3 className="font-semibold text-foreground mb-2">{s.title}</h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">{s.desc}</p>
                 </div>
@@ -497,16 +595,26 @@ export default function Landing() {
               <h2 className="font-cal text-3xl sm:text-5xl font-bold text-foreground">Loved by teams worldwide.</h2>
             </div>
           </Reveal>
+
           <div className="grid sm:grid-cols-3 gap-6">
             {TESTIMONIALS.map((t, i) => (
               <Reveal key={t.author} delay={i * 80}>
-                <div className="p-6 rounded-2xl border border-border bg-card hover:shadow-lg transition-all">
+                <div className="p-6 rounded-2xl border border-border/80 bg-card/85 hover:shadow-lg hover:-translate-y-0.5 transition-all">
                   <div className="flex gap-1 mb-4">
-                    {Array(5).fill(0).map((_, i) => <Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />)}
+                    {Array(5)
+                      .fill(0)
+                      .map((_, idx) => (
+                        <Star key={idx} className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                      ))}
                   </div>
                   <p className="text-sm text-foreground leading-relaxed mb-5">"{t.quote}"</p>
                   <div className="flex items-center gap-3">
-                    <div className={cn('w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold', t.color)}>
+                    <div
+                      className={cn(
+                        'w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold',
+                        t.color
+                      )}
+                    >
                       {t.avatar}
                     </div>
                     <div>
@@ -521,7 +629,7 @@ export default function Landing() {
         </div>
       </section>
 
-      <section id="pricing" className="py-24 px-4 sm:px-6 bg-muted/30">
+      <section id="pricing" className="py-24 px-4 sm:px-6 bg-muted/30 border-y border-border/60">
         <div className="max-w-5xl mx-auto">
           <Reveal>
             <div className="text-center mb-16">
@@ -530,22 +638,30 @@ export default function Landing() {
               <p className="mt-4 text-lg text-muted-foreground max-w-xl mx-auto">Start free, upgrade when you're ready. No hidden fees.</p>
             </div>
           </Reveal>
+
           <div className="flex justify-center mb-8">
-            <div className="flex items-center gap-3 p-1 bg-card rounded-lg border border-border">
+            <div className="flex items-center gap-3 p-1 bg-card/90 rounded-lg border border-border/80">
               <button
                 onClick={() => setIsYearly(false)}
-                className={cn('px-4 py-2 rounded-md text-sm font-medium transition-colors', !isYearly ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
+                className={cn(
+                  'px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer min-h-11',
+                  !isYearly ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                )}
               >
                 Monthly
               </button>
               <button
                 onClick={() => setIsYearly(true)}
-                className={cn('px-4 py-2 rounded-md text-sm font-medium transition-colors', isYearly ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
+                className={cn(
+                  'px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer min-h-11',
+                  isYearly ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                )}
               >
                 Yearly <span className="text-xs opacity-70 ml-1">Save 20%</span>
               </button>
             </div>
           </div>
+
           <div className="grid sm:grid-cols-3 gap-6">
             {PLANS.map((plan) => (
               <PricingCard key={plan.name} plan={plan} isYearly={isYearly} />
@@ -562,7 +678,8 @@ export default function Landing() {
               <h2 className="font-cal text-3xl sm:text-5xl font-bold text-foreground">Frequently asked questions.</h2>
             </div>
           </Reveal>
-          <div className="space-y-0">
+
+          <div className="space-y-3">
             {FAQS.map((faq, i) => (
               <Reveal key={i} delay={i * 50}>
                 <FAQItem q={faq.q} a={faq.a} />
@@ -572,16 +689,14 @@ export default function Landing() {
         </div>
       </section>
 
-      <footer className="py-12 px-4 sm:px-6 border-t border-border">
+      <footer className="py-12 px-4 sm:px-6 border-t border-border/70 bg-muted/20">
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <Layers className="w-4 h-4 text-white" />
-              </div>
+<div className="flex items-center gap-2">
+              <img src="/logo.png" alt="OneChat" className="w-8 h-8 rounded-lg object-contain" />
               <span className="font-cal font-bold text-foreground">OneChat</span>
             </div>
-            <p className="text-sm text-muted-foreground">© 2024 OneChat. All rights reserved.</p>
+            <p className="text-sm text-muted-foreground">&copy; 2024 OneChat. All rights reserved.</p>
           </div>
         </div>
       </footer>

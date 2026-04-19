@@ -28,3 +28,9 @@ HTMLCanvasElement.prototype.getContext = function getContext() {
 
 window.requestAnimationFrame = (cb) => setTimeout(cb, 0);
 window.cancelAnimationFrame = (id) => clearTimeout(id);
+
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};

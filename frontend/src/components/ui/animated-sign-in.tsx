@@ -178,6 +178,11 @@ const AnimatedSignIn: React.FC<AnimatedSignInProps> = ({ initialMode = "login" }
             80% { transform:translate(3%, 35%) }
             90% { transform:translate(-10%, 10%) }
           }
+
+          @keyframes logo-glow {
+            from { box-shadow: 0 0 40px rgba(255, 255, 255, 0.3), 0 0 80px rgba(255, 255, 255, 0.15); }
+            to { box-shadow: 0 0 60px rgba(255, 255, 255, 0.5), 0 0 120px rgba(255, 255, 255, 0.25); }
+          }
         `}
       </style>
 
@@ -199,6 +204,14 @@ const AnimatedSignIn: React.FC<AnimatedSignInProps> = ({ initialMode = "login" }
         }}
       >
         <div style={styles.headingArea}>
+          {/* OneChat Logo with Glow */}
+          <div style={styles.logoContainer}>
+            <img 
+              src="/logo.png" 
+              alt="OneChat" 
+              style={styles.logo} 
+            />
+          </div>
           {/* Distinctive Typography */}
           <h1 style={styles.heading}>
             {mode === "login" ? "AUTHENTICATE." : "INITIATE."}
@@ -379,6 +392,19 @@ const styles: Record<string, React.CSSProperties> = {
   },
   headingArea: {
     marginBottom: 40,
+  },
+  logoContainer: {
+    display: 'flex',
+    justifyContent: 'center',
+    marginBottom: 32,
+  },
+  logo: {
+    width: 80,
+    height: 80,
+    objectFit: 'contain',
+    borderRadius: 16,
+    boxShadow: '0 0 40px rgba(255, 255, 255, 0.3), 0 0 80px rgba(255, 255, 255, 0.15)',
+    animation: 'logo-glow 3s ease-in-out infinite alternate',
   },
   heading: {
     fontFamily: "'Syne', sans-serif",
