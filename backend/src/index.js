@@ -21,10 +21,22 @@
 
 const http = require('http');
 const { Server } = require('socket.io');
+const mongoose = require('mongoose');
 const connectDB = require('./config/db');
+const { getRedis } = require('./config/redis');
 const { createApp } = require('./app');
 const { initSocketServer } = require('./websocket/socketServer');
 const { logger } = require('./logger');
+
+process.on('uncaughtException', (err) => {
+  logger.error({ err, message: 'Uncaught Exception' });
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (err) => {
+  logger.error({ err, message: 'Unhandled Rejection' });
+  process.exit(1);
+});
 
 /**
  * Validate required environment variables on startup.
@@ -60,4 +72,33 @@ connectDB().then(() => {
   server.listen(PORT, () => {
     logger.info({ port: PORT }, 'OneChat server running');
   });
+
+  const gracefulShutdown = async (signal) => {
+    logger.info(`Received ${signal}. Shutting down gracefully...`);
+    
+    server.close(() => {
+      logger.info('HTTP server closed');
+    });
+
+    try {
+      if (mongoose.connection.readyState === 1) {
+        await mongoose.connection.close();
+        logger.info('MongoDB connection closed');
+      }
+      
+      const redis = getRedis();
+      if (redis) {
+        await redis.quit();
+        logger.info('Redis connection closed');
+      }
+      
+      process.exit(0);
+    } catch (err) {
+      logger.error({ err, message: 'Error during graceful shutdown' });
+      process.exit(1);
+    }
+  };
+
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 });

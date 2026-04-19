@@ -11,10 +11,13 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const compression = require('compression');
 const mongoose = require('mongoose');
 const { getRedis } = require('./config/redis');
 const { errorHandler, notFoundHandler, AppError } = require('./middleware/errors');
 const { httpLogger, requestIdMiddleware } = require('./logger');
+const { rateLimiter } = require('./middleware/rateLimiter');
 
 function createApp() {
   const authRoutes = require('./auth/auth.routes');
@@ -33,14 +36,10 @@ function createApp() {
 
   app.use(httpLogger);
   app.use(requestIdMiddleware);
+  app.use(helmet());
+  app.use(compression());
+  app.use(rateLimiter(60000, 100));
   app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
-  app.use((req, res, next) => {
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'DENY');
-    res.setHeader('X-XSS-Protection', '1; mode=block');
-    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    next();
-  });
   app.use(express.json({ limit: '10kb' }));
 
   app.use('/auth', authRoutes);

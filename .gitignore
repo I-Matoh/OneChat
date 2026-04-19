@@ -21,7 +21,7 @@ build/
 
 
 # Agent and AI related
-.agent/
+
 .agent-cache/
 .agentignore
 *.agentignore

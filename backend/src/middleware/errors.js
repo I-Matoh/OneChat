@@ -8,6 +8,8 @@
  *   - Centralized error response formatter
  */
 
+const { logger } = require('../logger');
+
 /**
  * Custom application error with HTTP status and error codes.
  * Use for domain-specific errors that need specific handling.
@@ -48,6 +50,16 @@ function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-va
   const statusCode = Number.isInteger(err.statusCode) ? err.statusCode : 500;
   const code = typeof err.code === 'string' ? err.code : (statusCode >= 500 ? 'INTERNAL_ERROR' : 'REQUEST_ERROR');
   const message = statusCode >= 500 ? 'Internal server error' : (err.message || 'Request failed');
+
+  if (statusCode >= 500) {
+    logger.error({
+      error: err.message,
+      stack: err.stack,
+      url: req.originalUrl,
+      method: req.method,
+      requestId: req.requestId,
+    });
+  }
 
   return res.status(statusCode).json({
     error: {
