@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Hash, Plus, Send, MessageSquare, Users, UserPlus } from 'lucide-react';
+import { Hash, Plus, Send, MessageSquare, Users, UserPlus, Circle, PanelRightOpen, PanelRightClose } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
@@ -49,6 +49,7 @@ export default function Chat() {
   const [sending, setSending] = useState(false);
   const [joiningChannel, setJoiningChannel] = useState(false);
   const [presenceByUserId, setPresenceByUserId] = useState({});
+  const [showOnlinePanel, setShowOnlinePanel] = useState(false);
 
   const { data: conversations = [] } = useQuery({
     queryKey: ['conversations', currentWorkspaceId],
@@ -87,6 +88,44 @@ export default function Chat() {
   const getUserStatus = (userId, fallbackStatus = 'offline') => (
     presenceByUserId[userId] || fallbackStatus || 'offline'
   );
+
+  // Split conversations into channels and DMs
+  const channels = conversations.filter((c) => c.type !== 'dm');
+  const dms = conversations.filter((c) => c.type === 'dm');
+
+  // Get display name for a DM conversation (shows the other person's name)
+  const getDmDisplayName = (conv) => {
+    const participants = conv.participants || [];
+    const other = participants.find((p) => normalizeId(p) !== normalizeId(user?.id));
+    if (other && typeof other === 'object') return other.name || other.email || 'User';
+    const otherUser = workspaceUsersById.get(normalizeId(other));
+    return otherUser?.name || otherUser?.email || 'User';
+  };
+
+  // Get the other user's presence in a DM
+  const getDmUserStatus = (conv) => {
+    const participants = conv.participants || [];
+    const other = participants.find((p) => normalizeId(p) !== normalizeId(user?.id));
+    const otherId = normalizeId(other);
+    return getUserStatus(otherId, 'offline');
+  };
+
+  // Get unread count for a conversation for the current user
+  const getUnreadCount = (conv) => {
+    if (!conv.unreadCounts) return 0;
+    const counts = conv.unreadCounts instanceof Map ? Object.fromEntries(conv.unreadCounts) : conv.unreadCounts;
+    return counts[user?.id] || 0;
+  };
+
+  // Compute the header display for selected conversation
+  const getSelectedConvDisplay = () => {
+    if (!selectedConv) return { name: '', icon: 'hash' };
+    if (selectedConv.type === 'dm') {
+      return { name: getDmDisplayName(selectedConv), icon: 'dm' };
+    }
+    return { name: selectedConv.name || 'channel', icon: 'hash' };
+  };
+  const selectedDisplay = getSelectedConvDisplay();
 
   useEffect(() => {
     if (!currentWorkspaceId) {
@@ -209,28 +248,16 @@ export default function Chat() {
   const handleStartDM = async (targetUserId) => {
     if (!targetUserId || targetUserId === user?.id) return;
 
-    const existingDm = conversations.find((c) => {
-      const pIds = (c.participants || []).map((p) => normalizeId(p));
-      return pIds.length === 2 &&
-             pIds.includes(normalizeId(user.id)) &&
-             pIds.includes(normalizeId(targetUserId));
-    });
-
-    if (existingDm) {
-      setSelectedConvId(getId(existingDm));
-      return;
-    }
-
     try {
-      const newConv = await api.conversations.create({
-        workspaceId: currentWorkspaceId,
-        participantIds: [targetUserId],
-        name: ''
-      });
+      const dmConv = await api.conversations.findOrCreateDM(targetUserId, currentWorkspaceId);
+      const convId = getId(dmConv);
       queryClient.setQueryData(['conversations', currentWorkspaceId], (existing = []) => {
-        return [newConv, ...existing];
+        const alreadyExists = existing.some((item) => getId(item) === convId);
+        if (alreadyExists) return existing;
+        return [dmConv, ...existing];
       });
-      setSelectedConvId(getId(newConv));
+      setSelectedConvId(convId);
+      setShowOnlinePanel(false);
     } catch (error) {
       console.error('Failed to start direct message', error);
       toast({
@@ -305,50 +332,95 @@ export default function Chat() {
 
   return (
     <div className="flex h-full">
-      <div className="w-56 border-r border-border bg-muted/30 flex flex-col shrink-0">
+      <div className="w-60 border-r border-border bg-muted/30 flex flex-col shrink-0">
         <div className="p-3 border-b border-border flex items-center justify-between">
-          <span className="text-sm font-semibold text-foreground">Channels</span>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="w-6 h-6 flex items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-            title="Create channel"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
+          <span className="text-sm font-semibold text-foreground">Messages</span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setShowOnlinePanel(!showOnlinePanel)}
+              className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors lg:hidden"
+              title="Online users"
+            >
+              <Users className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setShowCreate(true)}
+              className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              title="Create channel"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
         </div>
-        <div className="flex-1 overflow-y-auto scrollbar-thin p-2 space-y-0.5">
-          {conversations.length === 0 ? (
-            <p className="text-xs text-muted-foreground p-2 text-center">No channels yet</p>
-          ) : (
-            conversations.map((conversation) => {
-              const conversationId = getId(conversation);
-              const participantObjects = (conversation.participants || []).map((participant) => {
-                if (participant && typeof participant === 'object') return participant;
-                return workspaceUsersById.get(normalizeId(participant)) || { _id: normalizeId(participant), status: 'offline' };
-              });
-              const onlineCount = participantObjects.filter((participant) => getUserStatus(normalizeId(participant), participant.status) === 'online').length;
-              return (
-                <button
-                  key={conversationId}
-                  onClick={() => setSelectedConvId(conversationId)}
-                  className={cn(
-                    'w-full px-2 py-1.5 rounded-md text-sm transition-colors text-left',
-                    selectedConvId === conversationId
-                      ? 'bg-primary/10 text-primary font-medium'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                  )}
-                >
-                  <span className="flex items-center gap-2">
-                    {participantObjects.length === 2
-                      ? <Users className="w-3.5 h-3.5 shrink-0" />
-                      : <Hash className="w-3.5 h-3.5 shrink-0" />}
-                    <span className="truncate">{conversation.name || 'channel'}</span>
-                  </span>
-                  <span className="text-[11px] text-muted-foreground pl-5">{onlineCount} online</span>
-                </button>
-              );
-            })
-          )}
+        <div className="flex-1 overflow-y-auto scrollbar-thin p-2 space-y-3">
+          {/* --- Channels Section --- */}
+          <div>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-1">Channels</p>
+            {channels.length === 0 ? (
+              <p className="text-xs text-muted-foreground px-2">No channels yet</p>
+            ) : (
+              channels.map((conv) => {
+                const convId = getId(conv);
+                const unread = getUnreadCount(conv);
+                return (
+                  <button
+                    key={convId}
+                    onClick={() => setSelectedConvId(convId)}
+                    className={cn(
+                      'w-full px-2 py-1.5 rounded-md text-sm transition-colors text-left flex items-center gap-2',
+                      selectedConvId === convId
+                        ? 'bg-primary/10 text-primary font-medium'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                    )}
+                  >
+                    <Hash className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate flex-1">{conv.name || 'general'}</span>
+                    {unread > 0 && (
+                      <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">{unread > 99 ? '99+' : unread}</span>
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          {/* --- Direct Messages Section --- */}
+          <div>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-1">Direct Messages</p>
+            {dms.length === 0 ? (
+              <p className="text-xs text-muted-foreground px-2">No DMs yet — click a user to start</p>
+            ) : (
+              dms.map((conv) => {
+                const convId = getId(conv);
+                const dmName = getDmDisplayName(conv);
+                const dmStatus = getDmUserStatus(conv);
+                const unread = getUnreadCount(conv);
+                return (
+                  <button
+                    key={convId}
+                    onClick={() => setSelectedConvId(convId)}
+                    className={cn(
+                      'w-full px-2 py-1.5 rounded-md text-sm transition-colors text-left flex items-center gap-2',
+                      selectedConvId === convId
+                        ? 'bg-primary/10 text-primary font-medium'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                    )}
+                  >
+                    <span className="relative shrink-0">
+                      <Avatar className="w-6 h-6">
+                        <AvatarFallback className="text-[10px]">{dmName[0]?.toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                      <span className={cn('absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-background', statusClass(dmStatus))} />
+                    </span>
+                    <span className="truncate flex-1">{dmName}</span>
+                    {unread > 0 && (
+                      <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">{unread > 99 ? '99+' : unread}</span>
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
         </div>
       </div>
 
@@ -357,10 +429,25 @@ export default function Chat() {
           <>
             <div className="px-5 py-3 border-b border-border flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 min-w-0">
-                <Hash className="w-4.5 h-4.5 text-muted-foreground shrink-0" />
-                <h2 className="font-semibold text-foreground truncate">{selectedConv.name || 'channel'}</h2>
+                {selectedDisplay.icon === 'dm' ? (
+                  <Avatar className="w-6 h-6 shrink-0">
+                    <AvatarFallback className="text-[10px]">{selectedDisplay.name[0]?.toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                ) : (
+                  <Hash className="w-4.5 h-4.5 text-muted-foreground shrink-0" />
+                )}
+                <h2 className="font-semibold text-foreground truncate">{selectedDisplay.name}</h2>
               </div>
-              <span className="text-xs text-muted-foreground">{selectedParticipants.length} members</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">{selectedParticipants.length} members</span>
+                <button
+                  onClick={() => setShowOnlinePanel(!showOnlinePanel)}
+                  className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                  title={showOnlinePanel ? 'Hide online users' : 'Show online users'}
+                >
+                  {showOnlinePanel ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
 
             {!isParticipant ? (
@@ -411,7 +498,7 @@ export default function Chat() {
                       value={messageText}
                       onChange={(event) => setMessageText(event.target.value)}
                       onKeyDown={handleKeyDown}
-                      placeholder={`Message #${selectedConv.name || 'channel'}`}
+                      placeholder={`Message ${selectedDisplay.icon === 'dm' ? selectedDisplay.name : '#' + selectedDisplay.name}`}
                       className="border-0 bg-transparent shadow-none focus-visible:ring-0 px-0 text-sm"
                     />
                     <button
@@ -439,51 +526,75 @@ export default function Chat() {
         )}
       </div>
 
-      <div className="hidden lg:flex w-64 border-l border-border bg-card/40 flex-col">
-        <div className="px-4 py-3 border-b border-border">
-          <p className="text-sm font-semibold text-foreground">Workspace</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Online users and members</p>
-        </div>
-        <div className="p-2 overflow-y-auto space-y-1">
-          {workspaceMembers.length === 0 ? (
-            <p className="text-xs text-muted-foreground p-2">No members found</p>
-          ) : (
-            workspaceMembers.map((member) => {
-              if (!member?.user) return null;
-              const participant = member.user;
-              const participantId = normalizeId(participant);
-              const status = getUserStatus(participantId, participant.status);
-              const isCurrentUser = participantId === normalizeId(user?.id);
-              
-              return (
-                <div key={participantId} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/70 group">
-                  <Avatar className="w-7 h-7">
-                    <AvatarFallback className="text-xs">
-                      {(participant.name || participant.email || 'U')[0]?.toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm truncate">{participant.name || participant.email || 'Member'}{isCurrentUser && ' (You)'}</p>
-                    <div className="flex items-center gap-1.5">
-                      <span className={cn('w-2 h-2 rounded-full', statusClass(status))} />
-                      <span className="text-[11px] text-muted-foreground capitalize">{status}</span>
-                    </div>
-                  </div>
-                  {!isCurrentUser && (
+      {(showOnlinePanel || true) && (
+        <div className={cn(
+          'w-64 border-l border-border bg-card/40 flex-col shrink-0 transition-all duration-200',
+          showOnlinePanel ? 'flex' : 'hidden lg:flex'
+        )}>
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Online Now</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {workspaceMembers.filter((m) => m?.user && getUserStatus(normalizeId(m.user), m.user.status) === 'online').length} online
+              </p>
+            </div>
+            <button
+              onClick={() => setShowOnlinePanel(false)}
+              className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors lg:hidden"
+            >
+              <PanelRightClose className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex-1 p-2 overflow-y-auto scrollbar-thin space-y-0.5">
+            {workspaceMembers.length === 0 ? (
+              <p className="text-xs text-muted-foreground p-2">No members found</p>
+            ) : (
+              [...workspaceMembers]
+                .filter((m) => m?.user)
+                .sort((a, b) => {
+                  const sa = getUserStatus(normalizeId(a.user), a.user.status);
+                  const sb = getUserStatus(normalizeId(b.user), b.user.status);
+                  const order = { online: 0, away: 1, offline: 2 };
+                  return (order[sa] ?? 3) - (order[sb] ?? 3);
+                })
+                .map((member) => {
+                  const participant = member.user;
+                  const participantId = normalizeId(participant);
+                  const status = getUserStatus(participantId, participant.status);
+                  const isCurrentUser = participantId === normalizeId(user?.id);
+                  
+                  return (
                     <button
-                      onClick={() => handleStartDM(participantId)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-muted rounded-md text-muted-foreground hover:text-foreground shrink-0"
-                      title="Direct Message"
+                      key={participantId}
+                      onClick={() => !isCurrentUser && handleStartDM(participantId)}
+                      disabled={isCurrentUser}
+                      className={cn(
+                        'w-full flex items-center gap-2 px-2 py-2 rounded-md transition-colors text-left',
+                        isCurrentUser ? 'opacity-60 cursor-default' : 'hover:bg-muted/70 cursor-pointer group'
+                      )}
                     >
-                      <MessageSquare className="w-4 h-4" />
+                      <span className="relative shrink-0">
+                        <Avatar className="w-8 h-8">
+                          <AvatarFallback className="text-xs">
+                            {(participant.name || participant.email || 'U')[0]?.toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className={cn('absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card', statusClass(status))} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm truncate">{participant.name || participant.email || 'Member'}{isCurrentUser && ' (You)'}</p>
+                        <p className="text-[11px] text-muted-foreground capitalize">{status}</p>
+                      </div>
+                      {!isCurrentUser && (
+                        <MessageSquare className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      )}
                     </button>
-                  )}
-                </div>
-              );
-            })
-          )}
+                  );
+                })
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {showCreate && (
         <CreateConversationModal

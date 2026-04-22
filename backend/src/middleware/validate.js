@@ -130,6 +130,7 @@ const validateConversationCreate = validateBody(Joi.object({
   workspaceId: objectIdLike.optional(),
   participantIds: Joi.array().items(objectIdLike).default([]),
   name: Joi.string().trim().allow('').max(180).optional(),
+  type: Joi.string().valid('dm', 'channel').optional(),
 }));
 
 const validateDocCreate = validateBody(Joi.object({

@@ -35,6 +35,12 @@ function registerChatHandlers(io, socket) {
 
     socket.join(`chat:${conversationId}`);
 
+    // Clear unread count for this user on this conversation
+    await Conversation.findByIdAndUpdate(conversationId, {
+      [`unreadCounts.${socket.user.id}`]: 0,
+    });
+    socket.emit('unread:cleared', { conversationId });
+
     const unseenMessages = await Message.find({
       conversationId,
       senderId: { $ne: socket.user.id },
@@ -76,10 +82,20 @@ function registerChatHandlers(io, socket) {
         content,
       });
 
-      // Update conversation's last message and sort order
+      // Increment unread counts for all participants except the sender
+      const unreadInc = {};
+      for (const pid of conv.participants) {
+        const pidStr = normalizeId(pid._id || pid);
+        if (pidStr !== socket.user.id) {
+          unreadInc[`unreadCounts.${pidStr}`] = 1;
+        }
+      }
+
+      // Update conversation's last message, sort order, and unread counts
       await Conversation.findByIdAndUpdate(conversationId, {
         lastMessage: content,
         updatedAt: Date.now(),
+        $inc: unreadInc,
       });
 
       const populated = {
