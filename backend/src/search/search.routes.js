@@ -11,7 +11,7 @@ const { authMiddleware } = require('../middleware/auth');
 const Conversation = require('../models/Conversation');
 const Document = require('../models/Document');
 const Workspace = require('../models/Workspace');
-const Page = require('../models/Page');
+const Message = require('../models/Message');
 const { AppError, asyncHandler } = require('../middleware/errors');
 
 const router = Router();
@@ -36,7 +36,7 @@ router.get('/', authMiddleware, asyncHandler(async (req, res) => {
   const regex = new RegExp(escapeRegExp(rawQuery), 'i');
   const userId = req.user.id;
 
-  const [conversations, documents, workspaces] = await Promise.all([
+  const [conversations, documents, workspaces, messages] = await Promise.all([
     Conversation.find({
       participants: userId,
       $or: [{ name: regex }, { lastMessage: regex }],
@@ -49,7 +49,16 @@ router.get('/', authMiddleware, asyncHandler(async (req, res) => {
       $or: [{ ownerId: userId }, { 'members.userId': userId }],
       name: regex,
     }).select('name updatedAt').limit(20),
+    Message.find({
+      $or: [{ content: regex }, { 'attachments.filename': regex }],
+    }).populate({
+      path: 'conversationId',
+      match: { participants: userId }
+    }).limit(50),
   ]);
+
+  // Filter messages where the user is a participant (since populate match doesn't filter the root query)
+  const accessibleMessages = messages.filter(m => m.conversationId);
 
   const workspaceIds = workspaces.map((item) => item._id);
   const pages = workspaceIds.length > 0
@@ -66,6 +75,7 @@ router.get('/', authMiddleware, asyncHandler(async (req, res) => {
       documents,
       workspaces,
       pages,
+      messages: accessibleMessages,
     },
   });
 }));

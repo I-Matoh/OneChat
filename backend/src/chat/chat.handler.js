@@ -35,24 +35,24 @@ function registerChatHandlers(io, socket) {
 
     socket.join(`chat:${conversationId}`);
 
-    // Clear unread count for this user on this conversation
+    // Clear unread counts for this user in this conversation
+    const pidStr = normalizeId(socket.user.id);
     await Conversation.findByIdAndUpdate(conversationId, {
-      [`unreadCounts.${socket.user.id}`]: 0,
+      $set: { [`unreadCounts.${pidStr}`]: 0 }
     });
-    socket.emit('unread:cleared', { conversationId });
-
-    const unseenMessages = await Message.find({
-      conversationId,
-      senderId: { $ne: socket.user.id },
-      status: { $ne: 'seen' },
-    }).select('_id');
-
-    await emitStatus(
-      io,
-      conversationId,
-      unseenMessages.map((message) => message._id.toString()),
-      'seen'
+    
+    // Update message status to 'seen' for messages sent by others
+    await Message.updateMany(
+      { conversationId, senderId: { $ne: socket.user.id }, status: { $ne: 'seen' } },
+      { $set: { status: 'seen' } }
     );
+
+    socket.emit('unread:cleared', { conversationId });
+    socket.to(`chat:${conversationId}`).emit('message:status_bulk', { 
+      conversationId, 
+      status: 'seen', 
+      userId: socket.user.id 
+    });
   });
 
   // Leave a conversation room
@@ -65,8 +65,10 @@ function registerChatHandlers(io, socket) {
     try {
       const conversationId = data?.conversationId;
       const content = data?.content?.trim();
-      if (!conversationId || !content) {
-        socket.emit('error', { message: 'conversationId and content are required' });
+      const attachments = data?.attachments || [];
+      
+      if (!conversationId || (!content && !attachments.length)) {
+        socket.emit('error', { message: 'conversationId and content or attachments are required' });
         return;
       }
 
@@ -79,7 +81,8 @@ function registerChatHandlers(io, socket) {
       const msg = await Message.create({
         conversationId,
         senderId: socket.user.id,
-        content,
+        content: content || '',
+        attachments,
       });
 
       // Increment unread counts for all participants except the sender
@@ -103,7 +106,8 @@ function registerChatHandlers(io, socket) {
         conversationId,
         senderId: socket.user.id,
         senderName: socket.user.name,
-        content,
+        content: content || '',
+        attachments: msg.attachments,
         createdAt: msg.createdAt,
         status: 'sent',
       };

@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Hash, Plus, Send, MessageSquare, Users, UserPlus, Circle, PanelRightOpen, PanelRightClose } from 'lucide-react';
+import { Hash, Plus, Send, MessageSquare, Users, UserPlus, Circle, PanelRightOpen, PanelRightClose, Paperclip, File, X, Image, ExternalLink, Download, Smile, Check, CheckCheck, Search } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
@@ -50,6 +50,12 @@ export default function Chat() {
   const [joiningChannel, setJoiningChannel] = useState(false);
   const [presenceByUserId, setPresenceByUserId] = useState({});
   const [showOnlinePanel, setShowOnlinePanel] = useState(false);
+  const [typingUsers, setTypingUsers] = useState({}); // { [userId]: { userName, timestamp } }
+  const [pendingAttachments, setPendingAttachments] = useState([]); // Array of { url, filename, size, mimeType }
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const lastTypingEmit = useRef(0);
+  const fileInputRef = useRef(null);
 
   const { data: conversations = [] } = useQuery({
     queryKey: ['conversations', currentWorkspaceId],
@@ -232,18 +238,80 @@ export default function Chat() {
       ));
     };
 
+    const onMessageUpdated = (updatedMessage) => {
+      if (!selectedConvId) return;
+      queryClient.setQueryData(['messages', selectedConvId], (existing = []) => (
+        existing.map((message) => (
+          getId(message) === normalizeId(updatedMessage._id) ? { ...message, ...updatedMessage } : message
+        ))
+      ));
+    };
+
+    const onMessageTyping = ({ userId, userName, conversationId }) => {
+      if (normalizeId(conversationId) !== selectedConvId) return;
+      if (normalizeId(userId) === user?.id) return;
+
+      setTypingUsers((prev) => ({
+        ...prev,
+        [userId]: { userName, timestamp: Date.now() },
+      }));
+    };
+
+    const onMessageStatusBulk = ({ conversationId: cid, status }) => {
+      if (normalizeId(cid) !== selectedConvId) return;
+      queryClient.setQueryData(['messages', selectedConvId], (existing = []) => (
+        existing.map((message) => (
+          message.status !== status ? { ...message, status } : message
+        ))
+      ));
+    };
+
     socket.on('conversation:new', onConversationNew);
     socket.on('conversation:updated', onConversationUpdated);
     socket.on('message:new', onMessageNew);
     socket.on('message:status', onMessageStatus);
+    socket.on('message:status_bulk', onMessageStatusBulk);
+    socket.on('message:updated', onMessageUpdated);
+    socket.on('message:typing', onMessageTyping);
 
     return () => {
       socket.off('conversation:new', onConversationNew);
       socket.off('conversation:updated', onConversationUpdated);
       socket.off('message:new', onMessageNew);
       socket.off('message:status', onMessageStatus);
+      socket.off('message:status_bulk', onMessageStatusBulk);
+      socket.off('message:updated', onMessageUpdated);
+      socket.off('message:typing', onMessageTyping);
     };
   }, [socket, queryClient, selectedConvId, currentWorkspaceId]);
+
+  // Cleanup stale typing users
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setTypingUsers((prev) => {
+        const next = { ...prev };
+        let changed = false;
+        Object.entries(next).forEach(([userId, data]) => {
+          if (now - data.timestamp > 4000) {
+            delete next[userId];
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleTyping = () => {
+    if (!socket || !selectedConvId) return;
+    const now = Date.now();
+    if (now - lastTypingEmit.current > 2000) {
+      socket.emit('message:typing', { conversationId: selectedConvId });
+      lastTypingEmit.current = now;
+    }
+  };
 
   const handleStartDM = async (targetUserId) => {
     if (!targetUserId || targetUserId === user?.id) return;
@@ -283,21 +351,57 @@ export default function Chat() {
   };
 
   const sendMessage = async () => {
-    if (!messageText.trim() || !selectedConvId || sending || !isParticipant) return;
-    const content = messageText.trim();
-    setMessageText('');
+    if ((!messageText.trim() && pendingAttachments.length === 0) || !selectedConvId || sending) return;
+
     setSending(true);
     try {
-      if (socket && connected) {
-        socket.emit('message:send', { conversationId: selectedConvId, content });
-      } else {
-        await api.messages.create({ conversationId: selectedConvId, content });
-      }
+      socket.emit('message:send', {
+        conversationId: selectedConvId,
+        content: messageText.trim(),
+        attachments: pendingAttachments,
+      });
+      setMessageText('');
+      setPendingAttachments([]);
     } catch (error) {
-      console.error('Failed to send message:', error);
-      setMessageText(content);
+      console.error('Failed to send message', error);
+      toast({
+        title: "Message failed",
+        description: "Could not send your message. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleFileSelect = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    for (const file of files) {
+      try {
+        const metadata = await api.messages.uploadFile(file);
+        setPendingAttachments(prev => [...prev, metadata]);
+      } catch (err) {
+        toast({
+          title: "Upload failed",
+          description: `Failed to upload ${file.name}`,
+          variant: "destructive"
+        });
+      }
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const removePendingAttachment = (index) => {
+    setPendingAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleToggleReaction = async (messageId, emoji) => {
+    try {
+      await api.messages.toggleReaction(messageId, emoji);
+    } catch (err) {
+      console.error('Failed to toggle reaction', err);
     }
   };
 
@@ -329,6 +433,10 @@ export default function Chat() {
       </div>
     );
   }
+
+  const filteredMessages = searchQuery.trim() 
+    ? messages.filter(m => m.content?.toLowerCase().includes(searchQuery.toLowerCase()) || m.attachments?.some(a => a.filename.toLowerCase().includes(searchQuery.toLowerCase())))
+    : messages;
 
   return (
     <div className="flex h-full">
@@ -427,23 +535,50 @@ export default function Chat() {
       <div className="flex-1 flex flex-col min-w-0">
         {selectedConv ? (
           <>
-            <div className="px-5 py-3 border-b border-border flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 min-w-0">
-                {selectedDisplay.icon === 'dm' ? (
-                  <Avatar className="w-6 h-6 shrink-0">
-                    <AvatarFallback className="text-[10px]">{selectedDisplay.name[0]?.toUpperCase()}</AvatarFallback>
-                  </Avatar>
-                ) : (
-                  <Hash className="w-4.5 h-4.5 text-muted-foreground shrink-0" />
-                )}
-                <h2 className="font-semibold text-foreground truncate">{selectedDisplay.name}</h2>
-              </div>
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-background/60 backdrop-blur-md sticky top-0 z-10">
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">{selectedParticipants.length} members</span>
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                  {selectedDisplay.icon === 'dm' ? <Users className="w-4 h-4" /> : <Hash className="w-4 h-4" />}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{selectedDisplay.name}</p>
+                  <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                    <Circle className="w-1.5 h-1.5 fill-emerald-500 text-emerald-500" />
+                    {selectedParticipants.length} members
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1">
+                {isSearching ? (
+                  <div className="flex items-center bg-muted/60 rounded-full px-2.5 py-1 border border-border w-48 mr-2">
+                    <Search className="w-3 h-3 text-muted-foreground mr-1.5" />
+                    <Input 
+                      className="h-5 border-0 bg-transparent p-0 text-[11px] focus-visible:ring-0 shadow-none" 
+                      placeholder="Search..."
+                      autoFocus
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    <button onClick={() => { setSearchQuery(''); setIsSearching(false); }}>
+                      <X className="w-3 h-3 text-muted-foreground hover:text-foreground" />
+                    </button>
+                  </div>
+                ) : (
+                  <button 
+                    onClick={() => setIsSearching(true)} 
+                    className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                    title="Search messages"
+                  >
+                    <Search className="w-4 h-4" />
+                  </button>
+                )}
                 <button
                   onClick={() => setShowOnlinePanel(!showOnlinePanel)}
-                  className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                  title={showOnlinePanel ? 'Hide online users' : 'Show online users'}
+                  className={cn(
+                    'w-8 h-8 flex items-center justify-center rounded-full transition-colors',
+                    showOnlinePanel ? 'bg-primary/10 text-primary' : 'hover:bg-muted text-muted-foreground hover:text-foreground'
+                  )}
                 >
                   {showOnlinePanel ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
                 </button>
@@ -465,16 +600,18 @@ export default function Chat() {
             ) : (
               <>
                 <div className="flex-1 overflow-y-auto scrollbar-thin p-4 space-y-4">
-                  {messages.length === 0 ? (
+                  {filteredMessages.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-center">
                       <MessageSquare className="w-10 h-10 text-muted-foreground/40 mb-3" />
-                      <p className="text-sm text-muted-foreground">No messages yet. Start the conversation!</p>
+                      <p className="text-sm text-muted-foreground">
+                        {searchQuery ? 'No messages matching your search.' : 'No messages yet. Start the conversation!'}
+                      </p>
                     </div>
                   ) : (
-                    messages.map((message, index) => {
+                    filteredMessages.map((message, index) => {
                       const senderId = normalizeSenderId(message.senderId);
                       const isMe = senderId === user?.id || message.senderId === user?.id;
-                      const previousMessage = messages[index - 1];
+                      const previousMessage = filteredMessages[index - 1];
                       const previousSenderId = normalizeSenderId(previousMessage?.senderId);
                       const sameAuthor = previousMessage
                         && previousSenderId === senderId
@@ -484,7 +621,9 @@ export default function Chat() {
                           key={getId(message)}
                           message={message}
                           isMe={isMe}
-                          compact={sameAuthor}
+                          compact={sameAuthor && !searchQuery}
+                          onToggleReaction={(emoji) => handleToggleReaction(getId(message), emoji)}
+                          currentUserId={user?.id}
                         />
                       );
                     })
@@ -492,11 +631,57 @@ export default function Chat() {
                   <div ref={bottomRef} />
                 </div>
 
-                <div className="p-3 border-t border-border">
+                <div className="p-3 border-t border-border relative">
+                  {/* Pending Attachments */}
+                  {pendingAttachments.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-3 px-2">
+                      {pendingAttachments.map((file, i) => (
+                        <div key={i} className="flex items-center gap-2 bg-muted p-1.5 rounded-lg border border-border pr-1">
+                          {file.mimeType?.startsWith('image/') ? (
+                            <div className="w-8 h-8 rounded bg-background overflow-hidden">
+                              <img src={file.url} alt="" className="w-full h-full object-cover" />
+                            </div>
+                          ) : (
+                            <File className="w-4 h-4 text-muted-foreground" />
+                          )}
+                          <span className="text-[11px] max-w-[100px] truncate">{file.filename}</span>
+                          <button 
+                            onClick={() => removePendingAttachment(i)}
+                            className="p-1 hover:bg-background rounded-full text-muted-foreground hover:text-destructive transition-colors"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Typing Indicator */}
+                  {Object.values(typingUsers).length > 0 && (
+                    <div className="absolute -top-6 left-5 text-[11px] text-muted-foreground animate-pulse">
+                      {Object.values(typingUsers).map(u => u.userName).join(', ')} {Object.values(typingUsers).length === 1 ? 'is' : 'are'} typing...
+                    </div>
+                  )}
                   <div className="flex items-center gap-2 bg-muted/60 rounded-xl px-3 py-2 border border-border">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      className="hidden"
+                      multiple
+                      onChange={handleFileSelect}
+                    />
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                    >
+                      <Paperclip className="w-4 h-4" />
+                    </button>
                     <Input
                       value={messageText}
-                      onChange={(event) => setMessageText(event.target.value)}
+                      onChange={(event) => {
+                        setMessageText(event.target.value);
+                        handleTyping();
+                      }}
                       onKeyDown={handleKeyDown}
                       placeholder={`Message ${selectedDisplay.icon === 'dm' ? selectedDisplay.name : '#' + selectedDisplay.name}`}
                       className="border-0 bg-transparent shadow-none focus-visible:ring-0 px-0 text-sm"
@@ -607,8 +792,21 @@ export default function Chat() {
   );
 }
 
-function MessageBubble({ message, isMe, compact }) {
+function MessageBubble({ message, isMe, compact, onToggleReaction, currentUserId }) {
   const senderName = message.senderName || message.senderId?.name || message.senderEmail || 'User';
+  const reactions = message.reactions || [];
+  
+  // Group reactions by emoji
+  const groupedReactions = reactions.reduce((acc, r) => {
+    if (!acc[r.emoji]) acc[r.emoji] = { count: 0, users: [], me: false };
+    acc[r.emoji].count += 1;
+    acc[r.emoji].users.push(r.userName);
+    if (normalizeId(r.userId) === normalizeId(currentUserId)) acc[r.emoji].me = true;
+    return acc;
+  }, {});
+
+  const quickEmojis = ['👍', '❤️', '🔥', '😂', '😮', '🙌'];
+
   return (
     <div className={cn('flex gap-3 group', isMe && 'flex-row-reverse')}>
       {!compact ? (
@@ -627,13 +825,97 @@ function MessageBubble({ message, isMe, compact }) {
             <span className="text-xs text-muted-foreground">{format(new Date(message.createdAt), 'HH:mm')}</span>
           </div>
         )}
-        <div className={cn(
-          'px-3 py-2 rounded-2xl text-sm leading-relaxed',
-          isMe
-            ? 'bg-primary text-primary-foreground rounded-tr-sm'
-            : 'bg-card border border-border text-foreground rounded-tl-sm'
-        )}>
-          {message.content}
+        <div className="relative group/content flex flex-col gap-1">
+          <div className={cn(
+            'px-3 py-2 rounded-2xl text-sm leading-relaxed relative group/msg',
+            isMe
+              ? 'bg-primary text-primary-foreground rounded-tr-sm'
+              : 'bg-card border border-border text-foreground rounded-tl-sm'
+          )}>
+            {message.content}
+            
+            {message.attachments?.length > 0 && (
+              <div className={cn('mt-2 space-y-2', message.content && 'pt-2 border-t border-white/10')}>
+                {message.attachments.map((file, i) => {
+                  const isImage = file.mimeType?.startsWith('image/');
+                  return (
+                    <div key={i} className={cn(
+                      'flex items-center gap-3 p-2 rounded-xl border',
+                      isMe ? 'bg-black/10 border-white/10' : 'bg-muted/50 border-border'
+                    )}>
+                      {isImage ? (
+                        <img src={file.url} alt="" className="w-12 h-12 rounded object-cover" />
+                      ) : (
+                        <div className="w-10 h-10 rounded bg-background flex items-center justify-center">
+                          <File className="w-5 h-5 text-muted-foreground" />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium truncate">{file.filename}</p>
+                        <p className="text-[10px] opacity-70">{(file.size / 1024).toFixed(1)} KB</p>
+                      </div>
+                      <a 
+                        href={file.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="p-2 hover:bg-black/10 rounded-lg transition-colors"
+                      >
+                        <Download className="w-4 h-4" />
+                      </a>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            
+            {isMe && (
+              <div className="absolute bottom-1 right-2 flex items-center opacity-70">
+                {message.status === 'seen' ? (
+                  <CheckCheck className="w-3 h-3 text-blue-300" />
+                ) : (
+                  <Check className="w-3 h-3 text-white/70" />
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Reactions Display */}
+          {Object.keys(groupedReactions).length > 0 && (
+            <div className={cn('flex flex-wrap gap-1 mt-1', isMe && 'justify-end')}>
+              {Object.entries(groupedReactions).map(([emoji, data]) => (
+                <button
+                  key={emoji}
+                  onClick={() => onToggleReaction(emoji)}
+                  title={data.users.join(', ')}
+                  className={cn(
+                    'flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] border transition-colors',
+                    data.me 
+                      ? 'bg-primary/10 border-primary/30 text-primary' 
+                      : 'bg-muted border-border hover:border-muted-foreground/30'
+                  )}
+                >
+                  <span>{emoji}</span>
+                  <span className="font-medium">{data.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Quick Reaction Picker (Visible on hover) */}
+          <div className={cn(
+            'absolute -top-8 bg-card border border-border shadow-md rounded-full px-1 py-0.5 flex gap-0.5 opacity-0 group-hover/content:opacity-100 transition-opacity z-10',
+            isMe ? 'right-0' : 'left-0'
+          )}>
+            {quickEmojis.map(emoji => (
+              <button
+                key={emoji}
+                onClick={() => onToggleReaction(emoji)}
+                className="w-6 h-6 flex items-center justify-center hover:bg-muted rounded-full text-sm transition-transform hover:scale-125"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>

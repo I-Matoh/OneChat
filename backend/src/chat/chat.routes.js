@@ -249,16 +249,52 @@ router.post('/messages', authMiddleware, asyncHandler(async (req, res) => {
 }));
 
 /**
+ * POST /chat/messages/:messageId/reactions
+ * Toggle a reaction on a message.
+ */
+router.post('/messages/:messageId/reactions', authMiddleware, asyncHandler(async (req, res) => {
+  const { emoji } = req.body;
+  if (!emoji) throw new AppError('Emoji is required', 400, 'VALIDATION_ERROR');
+
+  const msg = await Message.findById(req.params.messageId);
+  if (!msg) throw new AppError('Message not found', 404, 'MESSAGE_NOT_FOUND');
+
+  const userId = req.user.id;
+  const reactions = msg.reactions || [];
+  
+  // Check if user already reacted with this emoji
+  const existingIndex = reactions.findIndex(r => r.emoji === emoji && normalizeId(r.userId) === normalizeId(userId));
+  
+  if (existingIndex > -1) {
+    // Remove reaction
+    reactions.splice(existingIndex, 1);
+  } else {
+    // Add reaction
+    reactions.push({ emoji, userId, userName: req.user.name });
+  }
+
+  msg.reactions = reactions;
+  await msg.save();
+
+  const io = getGlobalIo();
+  if (io) {
+    io.to(`chat:${msg.conversationId}`).emit('message:updated', {
+      _id: msg._id,
+      reactions: msg.reactions,
+    });
+  }
+
+  res.json(msg);
+}));
+
+/**
  * PATCH /chat/messages/:messageId
- * Update message (e.g., reactions).
+ * Update message (e.g., content).
  */
 router.patch('/messages/:messageId', authMiddleware, asyncHandler(async (req, res) => {
   const msg = await Message.findById(req.params.messageId);
   if (!msg) throw new AppError('Message not found', 404, 'MESSAGE_NOT_FOUND');
 
-  if (req.body.reactions !== undefined) {
-    msg.reactions = req.body.reactions;
-  }
   if (req.body.content !== undefined) {
     msg.content = req.body.content;
   }
@@ -269,7 +305,6 @@ router.patch('/messages/:messageId', authMiddleware, asyncHandler(async (req, re
   if (io) {
     io.to(`chat:${msg.conversationId}`).emit('message:updated', {
       _id: msg._id,
-      reactions: msg.reactions,
       content: msg.content,
     });
   }

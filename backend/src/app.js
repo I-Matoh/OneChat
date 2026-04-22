@@ -31,6 +31,8 @@ function createApp() {
   const searchRoutes = require('./search/search.routes');
   const taskRoutes = require('./tasks/task.routes');
   const activityRoutes = require('./activity/activity.routes');
+  const storageRoutes = require('./chat/storage.routes');
+  const path = require('path');
 
   const app = express();
 
@@ -40,11 +42,13 @@ function createApp() {
   app.use(compression());
   app.use(rateLimiter(60000, 100));
   app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
-  app.use(express.json({ limit: '10kb' }));
+  app.use(express.json({ limit: '50kb' }));
+  app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
   app.use('/auth', authRoutes);
   app.use('/users', userRoutes);
   app.use('/chat', chatRoutes);
+  app.use('/chat/storage', storageRoutes);
   app.use('/docs', collabRoutes);
   app.use('/notifications', notificationRoutes);
   app.use('/presence', presenceRoutes);

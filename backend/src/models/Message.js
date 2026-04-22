@@ -12,6 +12,12 @@ const messageSchema = new mongoose.Schema({
   conversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Conversation', required: true, index: true },
   senderId:       { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   content:        { type: String, required: true },
+  attachments:    [{
+    url:      { type: String, required: true },
+    filename: { type: String, required: true },
+    size:     { type: Number },
+    mimeType: { type: String },
+  }],
   status:         { type: String, enum: ['sent', 'delivered', 'seen'], default: 'sent' },
   reactions:      { type: Array, default: [] },
 }, { timestamps: true });

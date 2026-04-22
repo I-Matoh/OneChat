@@ -80,6 +80,20 @@ export const api = {
   messages: {
     create: (data) => apiFetch('/chat/messages', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => apiFetch(`/chat/messages/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    uploadFile: (file) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return apiFetch('/chat/storage/upload', {
+        method: 'POST',
+        body: formData,
+        // Don't set Content-Type header, fetch will set it with boundary
+        headers: {},
+      });
+    },
+    toggleReaction: (messageId, emoji) => apiFetch(`/chat/messages/${messageId}/reactions`, {
+      method: 'POST',
+      body: JSON.stringify({ emoji }),
+    }),
   },
 
   users: {
