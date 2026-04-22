@@ -48,7 +48,7 @@ router.get('/conversations', authMiddleware, asyncHandler(async (req, res) => {
  * Create a new conversation with specified participants.
  */
 router.post('/conversations', authMiddleware, validateConversationCreate, asyncHandler(async (req, res) => {
-  const { participantIds, name, workspaceId } = req.body;
+  const { participantIds, name, workspaceId, type } = req.body;
   if (!workspaceId) {
     throw new AppError('workspaceId is required', 400, 'VALIDATION_ERROR');
   }
@@ -69,10 +69,14 @@ router.post('/conversations', authMiddleware, validateConversationCreate, asyncH
   ]);
   const participants = [...participantSet];
 
+  // Auto-detect type: exactly 2 participants = DM, otherwise channel
+  const convType = type || (participants.length === 2 ? 'dm' : 'channel');
+
   const conv = await Conversation.create({
     workspaceId,
     participants,
     name: name || '',
+    type: convType,
   });
   const populated = await conv.populate('participants', 'name email status');
 
@@ -93,6 +97,60 @@ router.post('/conversations', authMiddleware, validateConversationCreate, asyncH
     message: `Created conversation "${name || 'Conversation'}"`,
     meta: { conversationId: conv._id.toString(), workspaceId: normalizeId(workspaceId) },
   });
+
+  res.status(201).json(populated);
+}));
+
+/**
+ * POST /chat/conversations/dm/:userId
+ * Find or create a DM conversation with the specified user.
+ * Race-condition safe: queries DB before creating.
+ */
+router.post('/conversations/dm/:userId', authMiddleware, asyncHandler(async (req, res) => {
+  const { userId } = req.params;
+  const { workspaceId } = req.body;
+  if (!workspaceId) throw new AppError('workspaceId is required', 400, 'VALIDATION_ERROR');
+
+  const workspace = await getWorkspaceForUser(workspaceId, req.user.id);
+  if (!workspace) throw new AppError('Workspace not found', 404, 'WORKSPACE_NOT_FOUND');
+
+  const workspaceMemberIds = getWorkspaceMemberIds(workspace);
+  if (!workspaceMemberIds.has(normalizeId(userId))) {
+    throw new AppError('Target user is not a workspace member', 400, 'VALIDATION_ERROR');
+  }
+
+  const myId = normalizeId(req.user.id);
+  const targetId = normalizeId(userId);
+
+  // Find existing DM between these two users in this workspace
+  const existing = await Conversation.findOne({
+    workspaceId,
+    type: 'dm',
+    participants: { $all: [myId, targetId], $size: 2 },
+  }).populate('participants', 'name email status');
+
+  if (existing) {
+    return res.json(existing);
+  }
+
+  // Create new DM
+  const conv = await Conversation.create({
+    workspaceId,
+    participants: [myId, targetId],
+    name: '',
+    type: 'dm',
+  });
+  const populated = await conv.populate('participants', 'name email status');
+
+  const io = getGlobalIo();
+  if (io) {
+    for (const pid of [myId, targetId]) {
+      io.to(`user:${pid}`).emit('conversation:new', {
+        ...populated.toObject(),
+        createdBy: { _id: req.user.id, name: req.user.name },
+      });
+    }
+  }
 
   res.status(201).json(populated);
 }));
@@ -159,9 +217,19 @@ router.post('/messages', authMiddleware, asyncHandler(async (req, res) => {
     content: content.trim(),
   });
 
+  // Increment unread counts for all participants except sender
+  const unreadInc = {};
+  for (const pid of conv.participants) {
+    const pidStr = normalizeId(pid);
+    if (pidStr !== normalizeId(req.user.id)) {
+      unreadInc[`unreadCounts.${pidStr}`] = 1;
+    }
+  }
+
   await Conversation.findByIdAndUpdate(conversationId, {
     lastMessage: content.trim(),
     updatedAt: Date.now(),
+    $inc: unreadInc,
   });
 
   const io = getGlobalIo();
