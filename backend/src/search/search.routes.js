@@ -12,6 +12,7 @@ const Conversation = require('../models/Conversation');
 const Document = require('../models/Document');
 const Workspace = require('../models/Workspace');
 const Message = require('../models/Message');
+const Page = require('../models/Page');
 const { AppError, asyncHandler } = require('../middleware/errors');
 
 const router = Router();

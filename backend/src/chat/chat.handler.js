@@ -13,17 +13,6 @@ async function getConversationForUser(conversationId, userId) {
     .populate('participants', 'name email status');
 }
 
-async function emitStatus(io, conversationId, messageIds, status) {
-  if (!messageIds.length) return;
-  await Message.updateMany(
-    { _id: { $in: messageIds }, conversationId, status: { $ne: status } },
-    { status }
-  );
-  for (const messageId of messageIds) {
-    io.to(`chat:${conversationId}`).emit('message:status', { messageId, status });
-  }
-}
-
 function registerChatHandlers(io, socket) {
   // Join a conversation room to receive messages
   socket.on('chat:join', async (conversationId) => {
