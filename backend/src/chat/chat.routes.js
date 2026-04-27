@@ -28,13 +28,14 @@ function getWorkspaceMemberIds(workspace) {
 /**
  * GET /chat/conversations
  * List all conversations for the authenticated user.
+ * Supports workspace-scoped or global (standalone) conversations.
  */
 router.get('/conversations', authMiddleware, asyncHandler(async (req, res) => {
   let filter = { participants: req.user.id };
   if (req.query.workspaceId) {
     const workspace = await getWorkspaceForUser(req.query.workspaceId, req.user.id);
     if (!workspace) throw new AppError('Workspace not found', 404, 'WORKSPACE_NOT_FOUND');
-    filter = { workspaceId: req.query.workspaceId };
+    filter = { workspaceId: req.query.workspaceId, participants: req.user.id };
   }
 
   const convs = await Conversation.find(filter)
@@ -49,35 +50,37 @@ router.get('/conversations', authMiddleware, asyncHandler(async (req, res) => {
  */
 router.post('/conversations', authMiddleware, validateConversationCreate, asyncHandler(async (req, res) => {
   const { participantIds, name, workspaceId, type } = req.body;
-  if (!workspaceId) {
-    throw new AppError('workspaceId is required', 400, 'VALIDATION_ERROR');
-  }
 
-  const workspace = await getWorkspaceForUser(workspaceId, req.user.id);
-  if (!workspace) throw new AppError('Workspace not found', 404, 'WORKSPACE_NOT_FOUND');
-  const workspaceMemberIds = getWorkspaceMemberIds(workspace);
+  let workspaceMemberIds = null;
+  if (workspaceId) {
+    const workspace = await getWorkspaceForUser(workspaceId, req.user.id);
+    if (!workspace) throw new AppError('Workspace not found', 404, 'WORKSPACE_NOT_FOUND');
+    workspaceMemberIds = getWorkspaceMemberIds(workspace);
 
-  const requestedParticipantIds = (participantIds || []).map(normalizeId);
-  const invalidParticipantIds = requestedParticipantIds.filter((id) => !workspaceMemberIds.has(id));
-  if (invalidParticipantIds.length) {
-    throw new AppError('All participants must belong to the workspace', 400, 'VALIDATION_ERROR');
+    const requestedParticipantIds = (participantIds || []).map(normalizeId);
+    const invalidParticipantIds = requestedParticipantIds.filter((id) => !workspaceMemberIds.has(id));
+    if (invalidParticipantIds.length) {
+      throw new AppError('All participants must belong to the workspace', 400, 'VALIDATION_ERROR');
+    }
   }
 
   const participantSet = new Set([
     normalizeId(req.user.id),
-    ...(requestedParticipantIds.length ? requestedParticipantIds : [...workspaceMemberIds]),
+    ...(participantIds || []).map(normalizeId),
   ]);
   const participants = [...participantSet];
 
   // Auto-detect type: exactly 2 participants = DM, otherwise channel
   const convType = type || (participants.length === 2 ? 'dm' : 'channel');
 
-  const conv = await Conversation.create({
-    workspaceId,
+  const convData = {
     participants,
     name: name || '',
     type: convType,
-  });
+  };
+  if (workspaceId) convData.workspaceId = workspaceId;
+
+  const conv = await Conversation.create(convData);
   const populated = await conv.populate('participants', 'name email status');
 
   const io = getGlobalIo();
@@ -90,13 +93,15 @@ router.post('/conversations', authMiddleware, validateConversationCreate, asyncH
     }
   }
 
-  await logActivity(io, {
-    actorId: req.user.id,
-    workspaceId,
-    type: 'conversation_created',
-    message: `Created conversation "${name || 'Conversation'}"`,
-    meta: { conversationId: conv._id.toString(), workspaceId: normalizeId(workspaceId) },
-  });
+  if (workspaceId) {
+    await logActivity(io, {
+      actorId: req.user.id,
+      workspaceId,
+      type: 'conversation_created',
+      message: `Created conversation "${name || 'Conversation'}"`,
+      meta: { conversationId: conv._id.toString(), workspaceId: normalizeId(workspaceId) },
+    });
+  }
 
   res.status(201).json(populated);
 }));
@@ -109,37 +114,44 @@ router.post('/conversations', authMiddleware, validateConversationCreate, asyncH
 router.post('/conversations/dm/:userId', authMiddleware, asyncHandler(async (req, res) => {
   const { userId } = req.params;
   const { workspaceId } = req.body;
-  if (!workspaceId) throw new AppError('workspaceId is required', 400, 'VALIDATION_ERROR');
 
-  const workspace = await getWorkspaceForUser(workspaceId, req.user.id);
-  if (!workspace) throw new AppError('Workspace not found', 404, 'WORKSPACE_NOT_FOUND');
+  if (workspaceId) {
+    const workspace = await getWorkspaceForUser(workspaceId, req.user.id);
+    if (!workspace) throw new AppError('Workspace not found', 404, 'WORKSPACE_NOT_FOUND');
 
-  const workspaceMemberIds = getWorkspaceMemberIds(workspace);
-  if (!workspaceMemberIds.has(normalizeId(userId))) {
-    throw new AppError('Target user is not a workspace member', 400, 'VALIDATION_ERROR');
+    const workspaceMemberIds = getWorkspaceMemberIds(workspace);
+    if (!workspaceMemberIds.has(normalizeId(userId))) {
+      throw new AppError('Target user is not a workspace member', 400, 'VALIDATION_ERROR');
+    }
   }
 
   const myId = normalizeId(req.user.id);
   const targetId = normalizeId(userId);
 
-  // Find existing DM between these two users in this workspace
-  const existing = await Conversation.findOne({
-    workspaceId,
+  // Build query for existing DM (workspace-scoped or global)
+  const existingQuery = {
     type: 'dm',
     participants: { $all: [myId, targetId], $size: 2 },
-  }).populate('participants', 'name email status');
+  };
+  if (workspaceId) existingQuery.workspaceId = workspaceId;
+  else existingQuery.workspaceId = { $exists: false };
+
+  const existing = await Conversation.findOne(existingQuery)
+    .populate('participants', 'name email status');
 
   if (existing) {
     return res.json(existing);
   }
 
   // Create new DM
-  const conv = await Conversation.create({
-    workspaceId,
+  const convData = {
     participants: [myId, targetId],
     name: '',
     type: 'dm',
-  });
+  };
+  if (workspaceId) convData.workspaceId = workspaceId;
+
+  const conv = await Conversation.create(convData);
   const populated = await conv.populate('participants', 'name email status');
 
   const io = getGlobalIo();
@@ -163,8 +175,11 @@ router.post('/conversations/:id/join', authMiddleware, asyncHandler(async (req, 
   const conversation = await Conversation.findById(req.params.id);
   if (!conversation) throw new AppError('Conversation not found', 404, 'CONVERSATION_NOT_FOUND');
 
-  const workspace = await getWorkspaceForUser(conversation.workspaceId, req.user.id);
-  if (!workspace) throw new AppError('Access denied', 403, 'ACCESS_DENIED');
+  // Workspace-scoped conversations require workspace membership
+  if (conversation.workspaceId) {
+    const workspace = await getWorkspaceForUser(conversation.workspaceId, req.user.id);
+    if (!workspace) throw new AppError('Access denied', 403, 'ACCESS_DENIED');
+  }
 
   const userId = normalizeId(req.user.id);
   const hasParticipant = (conversation.participants || []).some((participantId) => normalizeId(participantId) === userId);

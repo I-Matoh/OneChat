@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { useOutletContext } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,8 +35,7 @@ function statusClass(status) {
 }
 
 export default function Chat() {
-  const { user, currentWorkspaceId } = useOutletContext();
-  const { token } = useAuth();
+  const { user, token } = useAuth();
   const queryClient = useQueryClient();
   const { socket, connected } = useSocket(token);
   const { toast } = useToast();
@@ -58,21 +56,17 @@ export default function Chat() {
   const fileInputRef = useRef(null);
 
   const { data: conversations = [] } = useQuery({
-    queryKey: ['conversations', currentWorkspaceId],
-    queryFn: () => api.conversations.list(currentWorkspaceId),
-    enabled: !!currentWorkspaceId,
+    queryKey: ['conversations'],
+    queryFn: () => api.conversations.list(),
   });
 
-  const { data: workspaceMembers = [] } = useQuery({
-    queryKey: ['workspace-members', currentWorkspaceId],
-    queryFn: () => api.workspaces.members(currentWorkspaceId),
-    enabled: !!currentWorkspaceId,
+  const { data: allUsers = [] } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => api.users.list(),
   });
 
-  const workspaceUsersById = new Map(
-    workspaceMembers
-      .filter((member) => member?.user)
-      .map((member) => [normalizeId(member.userId), member.user])
+  const usersById = new Map(
+    allUsers.map((u) => [normalizeId(u._id || u.id), u])
   );
 
   const selectedConv = conversations.find((conversation) => getId(conversation) === selectedConvId) || null;
@@ -81,7 +75,7 @@ export default function Chat() {
     if (participant && typeof participant === 'object' && (participant._id || participant.id)) {
       return participant;
     }
-    return workspaceUsersById.get(participantId) || { _id: participantId, name: 'Member', status: 'offline' };
+    return usersById.get(participantId) || { _id: participantId, name: 'Member', status: 'offline' };
   });
   const isParticipant = selectedParticipants.some((participant) => normalizeId(participant) === normalizeId(user?.id));
 
@@ -104,7 +98,7 @@ export default function Chat() {
     const participants = conv.participants || [];
     const other = participants.find((p) => normalizeId(p) !== normalizeId(user?.id));
     if (other && typeof other === 'object') return other.name || other.email || 'User';
-    const otherUser = workspaceUsersById.get(normalizeId(other));
+    const otherUser = usersById.get(normalizeId(other));
     return otherUser?.name || otherUser?.email || 'User';
   };
 
@@ -134,10 +128,6 @@ export default function Chat() {
   const selectedDisplay = getSelectedConvDisplay();
 
   useEffect(() => {
-    if (!currentWorkspaceId) {
-      setSelectedConvId(null);
-      return;
-    }
     if (conversations.length === 0) {
       setSelectedConvId(null);
       return;
@@ -146,7 +136,7 @@ export default function Chat() {
     if (!selectedConvId || !selectedExists) {
       setSelectedConvId(getId(conversations[0]));
     }
-  }, [conversations, selectedConvId, currentWorkspaceId]);
+  }, [conversations, selectedConvId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -189,7 +179,7 @@ export default function Chat() {
 
     const updateConversationPreview = (conversationId, lastMessage, updatedAt) => {
       const normalizedConversationId = normalizeId(conversationId);
-      queryClient.setQueryData(['conversations', currentWorkspaceId], (existing = []) => {
+      queryClient.setQueryData(['conversations'], (existing = []) => {
         const next = existing.map((conversation) => (
           getId(conversation) === normalizedConversationId
             ? { ...conversation, lastMessage, updatedAt: updatedAt || new Date().toISOString() }
@@ -200,11 +190,8 @@ export default function Chat() {
     };
 
     const onConversationNew = (conversation) => {
-      if (currentWorkspaceId && conversation.workspaceId && normalizeId(conversation.workspaceId) !== currentWorkspaceId) {
-        return;
-      }
       const conversationId = getId(conversation);
-      queryClient.setQueryData(['conversations', currentWorkspaceId], (existing = []) => {
+      queryClient.setQueryData(['conversations'], (existing = []) => {
         const alreadyExists = existing.some((item) => getId(item) === conversationId);
         if (alreadyExists) return existing;
         const next = [conversation, ...existing];
@@ -283,7 +270,7 @@ export default function Chat() {
       socket.off('message:updated', onMessageUpdated);
       socket.off('message:typing', onMessageTyping);
     };
-  }, [socket, queryClient, selectedConvId, currentWorkspaceId]);
+  }, [socket, queryClient, selectedConvId]);
 
   // Cleanup stale typing users
   useEffect(() => {
@@ -317,9 +304,9 @@ export default function Chat() {
     if (!targetUserId || targetUserId === user?.id) return;
 
     try {
-      const dmConv = await api.conversations.findOrCreateDM(targetUserId, currentWorkspaceId);
+      const dmConv = await api.conversations.findOrCreateDM(targetUserId);
       const convId = getId(dmConv);
-      queryClient.setQueryData(['conversations', currentWorkspaceId], (existing = []) => {
+      queryClient.setQueryData(['conversations'], (existing = []) => {
         const alreadyExists = existing.some((item) => getId(item) === convId);
         if (alreadyExists) return existing;
         return [dmConv, ...existing];
@@ -341,7 +328,7 @@ export default function Chat() {
     setJoiningChannel(true);
     try {
       const joined = await api.conversations.join(selectedConvId);
-      queryClient.setQueryData(['conversations', currentWorkspaceId], (existing = []) => (
+      queryClient.setQueryData(['conversations'], (existing = []) => (
         existing.map((conversation) => (getId(conversation) === selectedConvId ? joined : conversation))
       ));
       queryClient.invalidateQueries({ queryKey: ['messages', selectedConvId] });
@@ -413,7 +400,7 @@ export default function Chat() {
   };
 
   const handleConversationCreated = (conversation) => {
-    queryClient.setQueryData(['conversations', currentWorkspaceId], (existing = []) => {
+    queryClient.setQueryData(['conversations'], (existing = []) => {
       const conversationId = getId(conversation);
       const alreadyExists = existing.some((item) => getId(item) === conversationId);
       if (alreadyExists) return existing;
@@ -422,17 +409,6 @@ export default function Chat() {
     setSelectedConvId(getId(conversation));
     setShowCreate(false);
   };
-
-  if (!currentWorkspaceId) {
-    return (
-      <div className="h-full flex items-center justify-center p-6">
-        <div className="text-center">
-          <MessageSquare className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-          <p className="text-muted-foreground">Select a workspace to start chatting</p>
-        </div>
-      </div>
-    );
-  }
 
   const filteredMessages = searchQuery.trim() 
     ? messages.filter(m => m.content?.toLowerCase().includes(searchQuery.toLowerCase()) || m.attachments?.some(a => a.filename.toLowerCase().includes(searchQuery.toLowerCase())))
@@ -590,7 +566,6 @@ export default function Chat() {
                 <div className="text-center max-w-sm">
                   <UserPlus className="w-9 h-9 mx-auto mb-3 text-primary/80" />
                   <p className="text-sm text-foreground font-medium">Join this channel to start chatting</p>
-                  <p className="text-xs text-muted-foreground mt-1">This channel belongs to workspace `{currentWorkspaceId}`.</p>
                   <Button className="mt-4 gap-1.5" onClick={joinSelectedChannel} disabled={joiningChannel}>
                     <UserPlus className="w-4 h-4" />
                     {joiningChannel ? 'Joining...' : 'Join Channel'}
@@ -720,7 +695,7 @@ export default function Chat() {
             <div>
               <p className="text-sm font-semibold text-foreground">Online Now</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {workspaceMembers.filter((m) => m?.user && getUserStatus(normalizeId(m.user), m.user.status) === 'online').length} online
+                {allUsers.filter((u) => getUserStatus(normalizeId(u._id || u.id), u.status) === 'online').length} online
               </p>
             </div>
             <button
@@ -731,27 +706,25 @@ export default function Chat() {
             </button>
           </div>
           <div className="flex-1 p-2 overflow-y-auto scrollbar-thin space-y-0.5">
-            {workspaceMembers.length === 0 ? (
-              <p className="text-xs text-muted-foreground p-2">No members found</p>
+            {allUsers.length === 0 ? (
+              <p className="text-xs text-muted-foreground p-2">No users found</p>
             ) : (
-              [...workspaceMembers]
-                .filter((m) => m?.user)
+              [...allUsers]
                 .sort((a, b) => {
-                  const sa = getUserStatus(normalizeId(a.user), a.user.status);
-                  const sb = getUserStatus(normalizeId(b.user), b.user.status);
+                  const sa = getUserStatus(normalizeId(a._id || a.id), a.status);
+                  const sb = getUserStatus(normalizeId(b._id || b.id), b.status);
                   const order = { online: 0, away: 1, offline: 2 };
                   return (order[sa] ?? 3) - (order[sb] ?? 3);
                 })
-                .map((member) => {
-                  const participant = member.user;
-                  const participantId = normalizeId(participant);
-                  const status = getUserStatus(participantId, participant.status);
-                  const isCurrentUser = participantId === normalizeId(user?.id);
-                  
+                .map((u) => {
+                  const userId = normalizeId(u._id || u.id);
+                  const status = getUserStatus(userId, u.status);
+                  const isCurrentUser = userId === normalizeId(user?.id);
+
                   return (
                     <button
-                      key={participantId}
-                      onClick={() => !isCurrentUser && handleStartDM(participantId)}
+                      key={userId}
+                      onClick={() => !isCurrentUser && handleStartDM(userId)}
                       disabled={isCurrentUser}
                       className={cn(
                         'w-full flex items-center gap-2 px-2 py-2 rounded-md transition-colors text-left',
@@ -761,13 +734,13 @@ export default function Chat() {
                       <span className="relative shrink-0">
                         <Avatar className="w-8 h-8">
                           <AvatarFallback className="text-xs">
-                            {(participant.name || participant.email || 'U')[0]?.toUpperCase()}
+                            {(u.name || u.email || 'U')[0]?.toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
                         <span className={cn('absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card', statusClass(status))} />
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm truncate">{participant.name || participant.email || 'Member'}{isCurrentUser && ' (You)'}</p>
+                        <p className="text-sm truncate">{u.name || u.email || 'User'}{isCurrentUser && ' (You)'}</p>
                         <p className="text-[11px] text-muted-foreground capitalize">{status}</p>
                       </div>
                       {!isCurrentUser && (
@@ -783,7 +756,6 @@ export default function Chat() {
 
       {showCreate && (
         <CreateConversationModal
-          workspaceId={currentWorkspaceId}
           onClose={() => setShowCreate(false)}
           onCreated={handleConversationCreated}
         />

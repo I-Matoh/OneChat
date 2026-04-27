@@ -74,7 +74,10 @@ export const api = {
     create: (data) => apiFetch('/chat/conversations', { method: 'POST', body: JSON.stringify(data) }),
     join: (id) => apiFetch(`/chat/conversations/${id}/join`, { method: 'POST' }),
     getMessages: (id, page = 1, limit = 50) => apiFetch(`/chat/conversations/${id}/messages?page=${page}&limit=${limit}`),
-    findOrCreateDM: (userId, workspaceId) => apiFetch(`/chat/conversations/dm/${userId}`, { method: 'POST', body: JSON.stringify({ workspaceId }) }),
+    findOrCreateDM: (userId, workspaceId) => {
+      const body = workspaceId ? JSON.stringify({ workspaceId }) : JSON.stringify({});
+      return apiFetch(`/chat/conversations/dm/${userId}`, { method: 'POST', body });
+    },
   },
 
   messages: {
